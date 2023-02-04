@@ -3,9 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ParseError, Node, JSONPath, Segment, parseTree, findNodeAtLocation } from './json';
-import { Edit, format, isEOL, FormattingOptions } from './jsonFormatter';
-import { mergeSort } from 'vs/base/common/arrays';
+import { findNodeAtLocation, JSONPath, Node, ParseError, parseTree, Segment } from './json';
+import { Edit, format, FormattingOptions, isEOL } from './jsonFormatter';
 
 
 export function removeProperty(text: string, path: JSONPath, formattingOptions: FormattingOptions): Edit[] {
@@ -120,7 +119,7 @@ export function setProperty(text: string, originalPath: JSONPath, value: any, fo
 	}
 }
 
-function withFormatting(text: string, edit: Edit, formattingOptions: FormattingOptions): Edit[] {
+export function withFormatting(text: string, edit: Edit, formattingOptions: FormattingOptions): Edit[] {
 	// apply the edit
 	let newText = applyEdit(text, edit);
 
@@ -156,7 +155,7 @@ export function applyEdit(text: string, edit: Edit): string {
 }
 
 export function applyEdits(text: string, edits: Edit[]): string {
-	let sortedEdits = mergeSort(edits, (a, b) => {
+	const sortedEdits = edits.slice(0).sort((a, b) => {
 		const diff = a.offset - b.offset;
 		if (diff === 0) {
 			return a.length - b.length;
@@ -165,7 +164,7 @@ export function applyEdits(text: string, edits: Edit[]): string {
 	});
 	let lastModifiedOffset = text.length;
 	for (let i = sortedEdits.length - 1; i >= 0; i--) {
-		let e = sortedEdits[i];
+		const e = sortedEdits[i];
 		if (e.offset + e.length <= lastModifiedOffset) {
 			text = applyEdit(text, e);
 		} else {
@@ -174,8 +173,4 @@ export function applyEdits(text: string, edits: Edit[]): string {
 		lastModifiedOffset = e.offset;
 	}
 	return text;
-}
-
-export function isWS(text: string, offset: number) {
-	return '\r\n \t'.indexOf(text.charAt(offset)) !== -1;
 }

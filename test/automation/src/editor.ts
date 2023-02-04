@@ -51,15 +51,6 @@ export class Editor {
 		return peek;
 	}
 
-	async waitForHighlightingLine(filename: string, line: number): Promise<void> {
-		const currentLineIndex = await this.getViewLineIndex(filename, line);
-		if (currentLineIndex) {
-			await this.code.waitForElement(`.monaco-editor .view-overlays>:nth-child(${currentLineIndex}) .current-line`);
-			return;
-		}
-		throw new Error('Cannot find line ' + line);
-	}
-
 	private async getSelector(filename: string, term: string, line: number): Promise<string> {
 		const lineIndex = await this.getViewLineIndex(filename, line);
 		const classNames = await this.getClassSelectors(filename, term, lineIndex);
@@ -89,11 +80,14 @@ export class Editor {
 		const line = `${editor} .view-lines > .view-line:nth-child(${lineNumber})`;
 		const textarea = `${editor} textarea`;
 
-		await this.code.waitAndClick(line, 0, 0);
+		await this.code.waitAndClick(line, 1, 1);
 		await this.code.waitForActiveElement(textarea);
 	}
 
 	async waitForTypeInEditor(filename: string, text: string, selectorPrefix = ''): Promise<any> {
+		if (text.includes('\n')) {
+			throw new Error('waitForTypeInEditor does not support new lines, use either a long single line or dispatchKeybinding(\'Enter\')');
+		}
 		const editor = [selectorPrefix || '', EDITOR(filename)].join(' ');
 
 		await this.code.waitForElement(editor);

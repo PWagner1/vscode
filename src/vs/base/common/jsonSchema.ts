@@ -46,6 +46,7 @@ export interface IJSONSchema {
 	const?: any;
 	contains?: IJSONSchema;
 	propertyNames?: IJSONSchema;
+	examples?: any[];
 
 	// schema draft 07
 	$comment?: string;
@@ -53,17 +54,39 @@ export interface IJSONSchema {
 	then?: IJSONSchema;
 	else?: IJSONSchema;
 
+	// schema 2019-09
+	unevaluatedProperties?: boolean | IJSONSchema;
+	unevaluatedItems?: boolean | IJSONSchema;
+	minContains?: number;
+	maxContains?: number;
+	deprecated?: boolean;
+	dependentRequired?: { [prop: string]: string[] };
+	dependentSchemas?: IJSONSchemaMap;
+	$defs?: { [name: string]: IJSONSchema };
+	$anchor?: string;
+	$recursiveRef?: string;
+	$recursiveAnchor?: string;
+	$vocabulary?: any;
+
+	// schema 2020-12
+	prefixItems?: IJSONSchema[];
+	$dynamicRef?: string;
+	$dynamicAnchor?: string;
+
 	// VSCode extensions
-	defaultSnippets?: IJSONSchemaSnippet[]; // VSCode extension
-	errorMessage?: string; // VSCode extension
-	patternErrorMessage?: string; // VSCode extension
-	deprecationMessage?: string; // VSCode extension
-	enumDescriptions?: string[]; // VSCode extension
-	markdownEnumDescriptions?: string[]; // VSCode extension
-	markdownDescription?: string; // VSCode extension
-	doNotSuggest?: boolean; // VSCode extension
-	allowComments?: boolean; // VSCode extension
-	allowTrailingCommas?: boolean; // VSCode extension
+
+	defaultSnippets?: IJSONSchemaSnippet[];
+	errorMessage?: string;
+	patternErrorMessage?: string;
+	deprecationMessage?: string;
+	markdownDeprecationMessage?: string;
+	enumDescriptions?: string[];
+	markdownEnumDescriptions?: string[];
+	markdownDescription?: string;
+	doNotSuggest?: boolean;
+	suggestSortText?: string;
+	allowComments?: boolean;
+	allowTrailingCommas?: boolean;
 }
 
 export interface IJSONSchemaMap {

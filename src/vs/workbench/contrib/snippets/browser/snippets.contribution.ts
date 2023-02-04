@@ -3,28 +3,81 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IJSONSchema } from 'vs/base/common/jsonSchema';
-import { Registry } from 'vs/platform/registry/common/platform';
-import * as JSONContributionRegistry from 'vs/platform/jsonschemas/common/jsonContributionRegistry';
+import { IJSONSchema, IJSONSchemaMap } from 'vs/base/common/jsonSchema';
 import * as nls from 'vs/nls';
-import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
-import { LanguageId } from 'vs/editor/common/modes';
-import { SnippetFile, Snippet } from 'vs/workbench/contrib/snippets/browser/snippetsFile';
+import { registerAction2 } from 'vs/platform/actions/common/actions';
+import { CommandsRegistry } from 'vs/platform/commands/common/commands';
+import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import * as JSONContributionRegistry from 'vs/platform/jsonschemas/common/jsonContributionRegistry';
+import { Registry } from 'vs/platform/registry/common/platform';
+import { Extensions as WorkbenchExtensions, IWorkbenchContributionsRegistry } from 'vs/workbench/common/contributions';
+import { ConfigureSnippets } from 'vs/workbench/contrib/snippets/browser/commands/configureSnippets';
+import { ApplyFileSnippetAction } from 'vs/workbench/contrib/snippets/browser/commands/fileTemplateSnippets';
+import { InsertSnippetAction } from 'vs/workbench/contrib/snippets/browser/commands/insertSnippet';
+import { SurroundWithSnippetEditorAction } from 'vs/workbench/contrib/snippets/browser/commands/surroundWithSnippet';
+import { SnippetCodeActions } from 'vs/workbench/contrib/snippets/browser/snippetCodeActionProvider';
+import { ISnippetsService } from 'vs/workbench/contrib/snippets/browser/snippets';
+import { SnippetsService } from 'vs/workbench/contrib/snippets/browser/snippetsService';
+import { LifecyclePhase } from 'vs/workbench/services/lifecycle/common/lifecycle';
+import { Extensions, IConfigurationRegistry } from 'vs/platform/configuration/common/configurationRegistry';
 
-export const ISnippetsService = createDecorator<ISnippetsService>('snippetService');
+import 'vs/workbench/contrib/snippets/browser/tabCompletion';
+import { editorConfigurationBaseNode } from 'vs/editor/common/config/editorConfigurationSchema';
 
-export interface ISnippetsService {
+// service
+registerSingleton(ISnippetsService, SnippetsService, InstantiationType.Delayed);
 
-	_serviceBrand: undefined;
+// actions
+registerAction2(InsertSnippetAction);
+CommandsRegistry.registerCommandAlias('editor.action.showSnippets', 'editor.action.insertSnippet');
+registerAction2(SurroundWithSnippetEditorAction);
+registerAction2(ConfigureSnippets);
+registerAction2(ApplyFileSnippetAction);
 
-	getSnippetFiles(): Promise<SnippetFile[]>;
+// workbench contribs
+Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench)
+	.registerWorkbenchContribution(SnippetCodeActions, LifecyclePhase.Restored);
 
-	getSnippets(languageId: LanguageId): Promise<Snippet[]>;
+// config
+Registry
+	.as<IConfigurationRegistry>(Extensions.Configuration)
+	.registerConfiguration({
+		...editorConfigurationBaseNode,
+		'properties': {
+			'editor.snippets.codeActions.enabled': {
+				'description': nls.localize('editor.snippets.codeActions.enabled', 'Controls if surround-with-snippets or file template snippets show as Code Actions.'),
+				'type': 'boolean',
+				'default': true
+			}
+		}
+	});
 
-	getSnippetsSync(languageId: LanguageId): Snippet[];
-}
 
+// schema
 const languageScopeSchemaId = 'vscode://schemas/snippets';
+
+const snippetSchemaProperties: IJSONSchemaMap = {
+	prefix: {
+		description: nls.localize('snippetSchema.json.prefix', 'The prefix to use when selecting the snippet in intellisense'),
+		type: ['string', 'array']
+	},
+	isFileTemplate: {
+		description: nls.localize('snippetSchema.json.isFileTemplate', 'The snippet is meant to populate or replace a whole file'),
+		type: 'boolean'
+	},
+	body: {
+		markdownDescription: nls.localize('snippetSchema.json.body', 'The snippet content. Use `$1`, `${1:defaultText}` to define cursor positions, use `$0` for the final cursor position. Insert variable values with `${varName}` and `${varName:defaultText}`, e.g. `This is file: $TM_FILENAME`.'),
+		type: ['string', 'array'],
+		items: {
+			type: 'string'
+		}
+	},
+	description: {
+		description: nls.localize('snippetSchema.json.description', 'The snippet description.'),
+		type: ['string', 'array']
+	}
+};
+
 const languageScopeSchema: IJSONSchema = {
 	id: languageScopeSchemaId,
 	allowComments: true,
@@ -37,24 +90,8 @@ const languageScopeSchema: IJSONSchema = {
 	description: nls.localize('snippetSchema.json', 'User snippet configuration'),
 	additionalProperties: {
 		type: 'object',
-		required: ['prefix', 'body'],
-		properties: {
-			prefix: {
-				description: nls.localize('snippetSchema.json.prefix', 'The prefix to used when selecting the snippet in intellisense'),
-				type: ['string', 'array']
-			},
-			body: {
-				description: nls.localize('snippetSchema.json.body', 'The snippet content. Use \'$1\', \'${1:defaultText}\' to define cursor positions, use \'$0\' for the final cursor position. Insert variable values with \'${varName}\' and \'${varName:defaultText}\', e.g. \'This is file: $TM_FILENAME\'.'),
-				type: ['string', 'array'],
-				items: {
-					type: 'string'
-				}
-			},
-			description: {
-				description: nls.localize('snippetSchema.json.description', 'The snippet description.'),
-				type: ['string', 'array']
-			}
-		},
+		required: ['body'],
+		properties: snippetSchemaProperties,
 		additionalProperties: false
 	}
 };
@@ -73,25 +110,11 @@ const globalSchema: IJSONSchema = {
 	description: nls.localize('snippetSchema.json', 'User snippet configuration'),
 	additionalProperties: {
 		type: 'object',
-		required: ['prefix', 'body'],
+		required: ['body'],
 		properties: {
-			prefix: {
-				description: nls.localize('snippetSchema.json.prefix', 'The prefix to used when selecting the snippet in intellisense'),
-				type: ['string', 'array']
-			},
+			...snippetSchemaProperties,
 			scope: {
 				description: nls.localize('snippetSchema.json.scope', "A list of language names to which this snippet applies, e.g. 'typescript,javascript'."),
-				type: 'string'
-			},
-			body: {
-				description: nls.localize('snippetSchema.json.body', 'The snippet content. Use \'$1\', \'${1:defaultText}\' to define cursor positions, use \'$0\' for the final cursor position. Insert variable values with \'${varName}\' and \'${varName:defaultText}\', e.g. \'This is file: $TM_FILENAME\'.'),
-				type: ['string', 'array'],
-				items: {
-					type: 'string'
-				}
-			},
-			description: {
-				description: nls.localize('snippetSchema.json.description', 'The snippet description.'),
 				type: 'string'
 			}
 		},

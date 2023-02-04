@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert';
-import { ILink } from 'vs/editor/common/modes';
-import { ILinkComputerTarget, computeLinks } from 'vs/editor/common/modes/linkComputer';
+import { ILink } from 'vs/editor/common/languages';
+import { ILinkComputerTarget, computeLinks } from 'vs/editor/common/languages/linkComputer';
 
 class SimpleLinkComputerTarget implements ILinkComputerTarget {
 
@@ -22,49 +22,40 @@ class SimpleLinkComputerTarget implements ILinkComputerTarget {
 }
 
 function myComputeLinks(lines: string[]): ILink[] {
-	let target = new SimpleLinkComputerTarget(lines);
+	const target = new SimpleLinkComputerTarget(lines);
 	return computeLinks(target);
 }
 
-function assertLink(text: string, extractedLink: string): void {
-	let startColumn = 0,
-		endColumn = 0,
-		chr: string,
-		i = 0;
-
-	for (i = 0; i < extractedLink.length; i++) {
-		chr = extractedLink.charAt(i);
-		if (chr !== ' ' && chr !== '\t') {
-			startColumn = i + 1;
-			break;
+function extractLinks(text: string): string {
+	const keep: boolean[] = [];
+	const links = myComputeLinks([text]);
+	for (const link of links) {
+		const startChar = link.range.startColumn - 1;
+		const endChar = link.range.endColumn - 1;
+		for (let char = startChar; char < endChar; char++) {
+			keep[char] = true;
 		}
 	}
-
-	for (i = extractedLink.length - 1; i >= 0; i--) {
-		chr = extractedLink.charAt(i);
-		if (chr !== ' ' && chr !== '\t') {
-			endColumn = i + 2;
-			break;
+	const result: string[] = [];
+	for (let i = 0; i < text.length; i++) {
+		if (keep[i]) {
+			result.push(text.charAt(i));
+		} else {
+			result.push(' ');
 		}
 	}
+	return result.join('');
+}
 
-	let r = myComputeLinks([text]);
-	assert.deepEqual(r, [{
-		range: {
-			startLineNumber: 1,
-			startColumn: startColumn,
-			endLineNumber: 1,
-			endColumn: endColumn
-		},
-		url: extractedLink.substring(startColumn - 1, endColumn - 1)
-	}]);
+function assertLink(text: string, expectedLinks: string): void {
+	assert.deepStrictEqual(extractLinks(text), expectedLinks);
 }
 
 suite('Editor Modes - Link Computer', () => {
 
 	test('Null model', () => {
-		let r = computeLinks(null);
-		assert.deepEqual(r, []);
+		const r = computeLinks(null);
+		assert.deepStrictEqual(r, []);
 	});
 
 	test('Parsing', () => {
@@ -106,19 +97,19 @@ suite('Editor Modes - Link Computer', () => {
 
 		assertLink(
 			'(see http://foo.bar)',
-			'     http://foo.bar  '
+			'     http://foo.bar '
 		);
 		assertLink(
 			'[see http://foo.bar]',
-			'     http://foo.bar  '
+			'     http://foo.bar '
 		);
 		assertLink(
 			'{see http://foo.bar}',
-			'     http://foo.bar  '
+			'     http://foo.bar '
 		);
 		assertLink(
 			'<see http://foo.bar>',
-			'     http://foo.bar  '
+			'     http://foo.bar '
 		);
 		assertLink(
 			'<url>http://mylink.com</url>',
@@ -199,7 +190,7 @@ suite('Editor Modes - Link Computer', () => {
 	test('issue #62278: "Ctrl + click to follow link" for IPv6 URLs', () => {
 		assertLink(
 			'let x = "http://[::1]:5000/connect/token"',
-			'         http://[::1]:5000/connect/token  '
+			'         http://[::1]:5000/connect/token '
 		);
 	});
 
@@ -207,6 +198,81 @@ suite('Editor Modes - Link Computer', () => {
 		assertLink(
 			'2. Navigate to **https://portal.azure.com**',
 			'                 https://portal.azure.com  '
+		);
+	});
+
+	test('issue #86358: URL wrong recognition pattern', () => {
+		assertLink(
+			'POST|https://portal.azure.com|2019-12-05|',
+			'     https://portal.azure.com            '
+		);
+	});
+
+	test('issue #67022: Space as end of hyperlink isn\'t always good idea', () => {
+		assertLink(
+			'aa  https://foo.bar/[this is foo site]  aa',
+			'    https://foo.bar/[this is foo site]    '
+		);
+	});
+
+	test('issue #100353: Link detection stops at ＆(double-byte)', () => {
+		assertLink(
+			'aa  http://tree-mark.chips.jp/レーズン＆ベリーミックス  aa',
+			'    http://tree-mark.chips.jp/レーズン＆ベリーミックス    '
+		);
+	});
+
+	test('issue #121438: Link detection stops at【...】', () => {
+		assertLink(
+			'aa  https://zh.wikipedia.org/wiki/【我推的孩子】 aa',
+			'    https://zh.wikipedia.org/wiki/【我推的孩子】   '
+		);
+	});
+
+	test('issue #121438: Link detection stops at《...》', () => {
+		assertLink(
+			'aa  https://zh.wikipedia.org/wiki/《新青年》编辑部旧址 aa',
+			'    https://zh.wikipedia.org/wiki/《新青年》编辑部旧址   '
+		);
+	});
+
+	test('issue #121438: Link detection stops at “...”', () => {
+		assertLink(
+			'aa  https://zh.wikipedia.org/wiki/“常凯申”误译事件 aa',
+			'    https://zh.wikipedia.org/wiki/“常凯申”误译事件   '
+		);
+	});
+
+	test('issue #150905: Colon after bare hyperlink is treated as its part', () => {
+		assertLink(
+			'https://site.web/page.html: blah blah blah',
+			'https://site.web/page.html                '
+		);
+	});
+
+	// Removed because of #156875
+	// test('issue #151631: Link parsing stoped where comments include a single quote ', () => {
+	// 	assertLink(
+	// 		`aa https://regexper.com/#%2F''%2F aa`,
+	// 		`   https://regexper.com/#%2F''%2F   `,
+	// 	);
+	// });
+
+	test('issue #156875: Links include quotes ', () => {
+		assertLink(
+			`"This file has been converted from https://github.com/jeff-hykin/better-c-syntax/blob/master/autogenerated/c.tmLanguage.json",`,
+			`                                   https://github.com/jeff-hykin/better-c-syntax/blob/master/autogenerated/c.tmLanguage.json  `,
+		);
+	});
+
+	test('issue #119696: Links shouldn\'t include commas', () => {
+		assertLink(
+			`https://apod.nasa.gov/apod/ap170720.html,IC 1396: Emission Nebula in Cepheus,https://apod.nasa.gov/apod/image/1707/MOSAIC_IC1396_HaSHO_blanco1024.jpg,https://apod.nasa.gov/apod/image/1707/MOSAIC_IC1396_HaSHO_blanco.jpg`,
+			`https://apod.nasa.gov/apod/ap170720.html                                     https://apod.nasa.gov/apod/image/1707/MOSAIC_IC1396_HaSHO_blanco1024.jpg https://apod.nasa.gov/apod/image/1707/MOSAIC_IC1396_HaSHO_blanco.jpg`
+		);
+		assertLink(
+			`https://apod.nasa.gov/apod/ap180402.html,"Moons, Rings, Shadows, Clouds: Saturn (Cassini)",https://apod.nasa.gov/apod/image/1804/SaturnRingsMoons_Cassini_967.jpg,https://apod.nasa.gov/apod/image/1804/SaturnRingsMoons_Cassini_967.jpg`,
+			`https://apod.nasa.gov/apod/ap180402.html                                                   https://apod.nasa.gov/apod/image/1804/SaturnRingsMoons_Cassini_967.jpg https://apod.nasa.gov/apod/image/1804/SaturnRingsMoons_Cassini_967.jpg`,
 		);
 	});
 });

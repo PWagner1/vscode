@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { URI } from 'vs/base/common/uri';
 import { Event } from 'vs/base/common/event';
-import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
-import { localize } from 'vs/nls';
 import Severity from 'vs/base/common/severity';
+import { URI } from 'vs/base/common/uri';
+import { localize } from 'vs/nls';
+import { createDecorator } from 'vs/platform/instantiation/common/instantiation';
 
 export interface IMarkerService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	getStatistics(): MarkerStatistics;
 
@@ -20,7 +20,7 @@ export interface IMarkerService {
 
 	remove(owner: string, resources: URI[]): void;
 
-	read(filter?: { owner?: string; resource?: URI; severities?: number, take?: number; }): IMarker[];
+	read(filter?: { owner?: string; resource?: URI; severities?: number; take?: number }): IMarker[];
 
 	readonly onMarkerChanged: Event<readonly URI[]>;
 }
@@ -55,7 +55,7 @@ export namespace MarkerSeverity {
 		return b - a;
 	}
 
-	const _displayStrings: { [value: number]: string; } = Object.create(null);
+	const _displayStrings: { [value: number]: string } = Object.create(null);
 	_displayStrings[MarkerSeverity.Error] = localize('sev.error', "Error");
 	_displayStrings[MarkerSeverity.Warning] = localize('sev.warning', "Warning");
 	_displayStrings[MarkerSeverity.Info] = localize('sev.info', "Info");
@@ -87,7 +87,7 @@ export namespace MarkerSeverity {
  * A structure defining a problem/warning/etc.
  */
 export interface IMarkerData {
-	code?: string;
+	code?: string | { value: string; target: URI };
 	severity: MarkerSeverity;
 	message: string;
 	source?: string;
@@ -95,6 +95,7 @@ export interface IMarkerData {
 	startColumn: number;
 	endLineNumber: number;
 	endColumn: number;
+	modelVersionId?: number;
 	relatedInformation?: IRelatedInformation[];
 	tags?: MarkerTag[];
 }
@@ -108,13 +109,14 @@ export interface IMarker {
 	owner: string;
 	resource: URI;
 	severity: MarkerSeverity;
-	code?: string;
+	code?: string | { value: string; target: URI };
 	message: string;
 	source?: string;
 	startLineNumber: number;
 	startColumn: number;
 	endLineNumber: number;
 	endColumn: number;
+	modelVersionId?: number;
 	relatedInformation?: IRelatedInformation[];
 	tags?: MarkerTag[];
 }
@@ -133,14 +135,18 @@ export namespace IMarkerData {
 	}
 
 	export function makeKeyOptionalMessage(markerData: IMarkerData, useMessage: boolean): string {
-		let result: string[] = [emptyString];
+		const result: string[] = [emptyString];
 		if (markerData.source) {
-			result.push(markerData.source.replace('¦', '\¦'));
+			result.push(markerData.source.replace('¦', '\\¦'));
 		} else {
 			result.push(emptyString);
 		}
 		if (markerData.code) {
-			result.push(markerData.code.replace('¦', '\¦'));
+			if (typeof markerData.code === 'string') {
+				result.push(markerData.code.replace('¦', '\\¦'));
+			} else {
+				result.push(markerData.code.value.replace('¦', '\\¦'));
+			}
 		} else {
 			result.push(emptyString);
 		}
@@ -153,7 +159,7 @@ export namespace IMarkerData {
 		// Modifed to not include the message as part of the marker key to work around
 		// https://github.com/microsoft/vscode/issues/77475
 		if (markerData.message && useMessage) {
-			result.push(markerData.message.replace('¦', '\¦'));
+			result.push(markerData.message.replace('¦', '\\¦'));
 		} else {
 			result.push(emptyString);
 		}

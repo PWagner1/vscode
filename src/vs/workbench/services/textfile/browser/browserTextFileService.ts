@@ -4,63 +4,66 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AbstractTextFileService } from 'vs/workbench/services/textfile/browser/textFileService';
-import { ITextFileService, IResourceEncodings, IResourceEncoding, ModelState } from 'vs/workbench/services/textfile/common/textfiles';
-import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
-import { ShutdownReason } from 'vs/platform/lifecycle/common/lifecycle';
-import { Schemas } from 'vs/base/common/network';
+import { ITextFileService, TextFileEditorModelState } from 'vs/workbench/services/textfile/common/textfiles';
+import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService';
+import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
+import { IModelService } from 'vs/editor/common/services/model';
+import { ILanguageService } from 'vs/editor/common/languages/language';
+import { ITextResourceConfigurationService } from 'vs/editor/common/services/textResourceConfiguration';
+import { IDialogService, IFileDialogService } from 'vs/platform/dialogs/common/dialogs';
+import { IFileService } from 'vs/platform/files/common/files';
+import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+import { ILogService } from 'vs/platform/log/common/log';
+import { IElevatedFileService } from 'vs/workbench/services/files/common/elevatedFileService';
+import { IFilesConfigurationService } from 'vs/workbench/services/filesConfiguration/common/filesConfigurationService';
+import { ILifecycleService } from 'vs/workbench/services/lifecycle/common/lifecycle';
+import { IPathService } from 'vs/workbench/services/path/common/pathService';
+import { IUntitledTextEditorService } from 'vs/workbench/services/untitled/common/untitledTextEditorService';
+import { IUriIdentityService } from 'vs/platform/uriIdentity/common/uriIdentity';
+import { IWorkingCopyFileService } from 'vs/workbench/services/workingCopy/common/workingCopyFileService';
+import { IDecorationsService } from 'vs/workbench/services/decorations/common/decorations';
 
 export class BrowserTextFileService extends AbstractTextFileService {
 
-	readonly encoding: IResourceEncodings = {
-		getPreferredWriteEncoding(): IResourceEncoding {
-			return { encoding: 'utf8', hasBOM: false };
-		}
-	};
+	constructor(
+		@IFileService fileService: IFileService,
+		@IUntitledTextEditorService untitledTextEditorService: IUntitledTextEditorService,
+		@ILifecycleService lifecycleService: ILifecycleService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IModelService modelService: IModelService,
+		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
+		@IDialogService dialogService: IDialogService,
+		@IFileDialogService fileDialogService: IFileDialogService,
+		@ITextResourceConfigurationService textResourceConfigurationService: ITextResourceConfigurationService,
+		@IFilesConfigurationService filesConfigurationService: IFilesConfigurationService,
+		@ICodeEditorService codeEditorService: ICodeEditorService,
+		@IPathService pathService: IPathService,
+		@IWorkingCopyFileService workingCopyFileService: IWorkingCopyFileService,
+		@IUriIdentityService uriIdentityService: IUriIdentityService,
+		@ILanguageService languageService: ILanguageService,
+		@IElevatedFileService elevatedFileService: IElevatedFileService,
+		@ILogService logService: ILogService,
+		@IDecorationsService decorationsService: IDecorationsService
+	) {
+		super(fileService, untitledTextEditorService, lifecycleService, instantiationService, modelService, environmentService, dialogService, fileDialogService, textResourceConfigurationService, filesConfigurationService, codeEditorService, pathService, workingCopyFileService, uriIdentityService, languageService, logService, elevatedFileService, decorationsService);
 
-	protected onBeforeShutdown(reason: ShutdownReason): boolean {
-		// Web: we cannot perform long running in the shutdown phase
-		// As such we need to check sync if there are any dirty files
-		// that have not been backed up yet and then prevent the shutdown
-		// if that is the case.
-		return this.doBeforeShutdownSync();
+		this.registerListeners();
 	}
 
-	private doBeforeShutdownSync(): boolean {
-		if (this.models.getAll().some(model => model.hasState(ModelState.PENDING_SAVE))) {
-			return true; // files are pending to be saved: veto
-		}
+	private registerListeners(): void {
 
-		const dirtyResources = this.getDirty();
-		if (!dirtyResources.length) {
-			return false; // no dirty: no veto
-		}
-
-		if (!this.filesConfigurationService.isHotExitEnabled) {
-			return true; // dirty without backup: veto
-		}
-
-		for (const dirtyResource of dirtyResources) {
-			let hasBackup = false;
-
-			if (this.fileService.canHandleResource(dirtyResource)) {
-				const model = this.models.get(dirtyResource);
-				hasBackup = !!(model?.hasBackup());
-			} else if (dirtyResource.scheme === Schemas.untitled) {
-				hasBackup = this.untitledTextEditorService.hasBackup(dirtyResource);
-			}
-
-			if (!hasBackup) {
-				console.warn('Unload prevented: pending backups');
-				return true; // dirty without backup: veto
-			}
-		}
-
-		return false; // dirty with backups: no veto
+		// Lifecycle
+		this.lifecycleService.onBeforeShutdown(event => event.veto(this.onBeforeShutdown(), 'veto.textFiles'));
 	}
 
-	protected async getWindowCount(): Promise<number> {
-		return 1; // Browser only ever is 1 window
+	private onBeforeShutdown(): boolean {
+		if (this.files.models.some(model => model.hasState(TextFileEditorModelState.PENDING_SAVE))) {
+			return true; // files are pending to be saved: veto (as there is no support for long running operations on shutdown)
+		}
+
+		return false;
 	}
 }
 
-registerSingleton(ITextFileService, BrowserTextFileService);
+registerSingleton(ITextFileService, BrowserTextFileService, InstantiationType.Eager);

@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SimpleKeybinding } from 'vs/base/common/keyCodes';
+import { Keybinding } from 'vs/base/common/keybindings';
 import { KeybindingParser } from 'vs/base/common/keybindingParser';
-import { ScanCodeBinding } from 'vs/base/common/scanCode';
-import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
+import { ContextKeyExpr, ContextKeyExpression } from 'vs/platform/contextkey/common/contextkey';
 import { IUserFriendlyKeybinding } from 'vs/platform/keybinding/common/keybinding';
 import { ResolvedKeybindingItem } from 'vs/platform/keybinding/common/resolvedKeybindingItem';
 
 export interface IUserKeybindingItem {
-	parts: (SimpleKeybinding | ScanCodeBinding)[];
+	keybinding: Keybinding | null;
 	command: string | null;
 	commandArgs?: any;
-	when: ContextKeyExpr | undefined;
+	when: ContextKeyExpression | undefined;
+	_source: IUserFriendlyKeybinding;
 }
 
 export class KeybindingIO {
@@ -23,32 +23,37 @@ export class KeybindingIO {
 		if (!item.resolvedKeybinding) {
 			return;
 		}
-		let quotedSerializedKeybinding = JSON.stringify(item.resolvedKeybinding.getUserSettingsLabel());
+		const quotedSerializedKeybinding = JSON.stringify(item.resolvedKeybinding.getUserSettingsLabel());
 		out.write(`{ "key": ${rightPaddedString(quotedSerializedKeybinding + ',', 25)} "command": `);
 
-		let quotedSerializedWhen = item.when ? JSON.stringify(item.when.serialize()) : '';
-		let quotedSerializeCommand = JSON.stringify(item.command);
+		const quotedSerializedWhen = item.when ? JSON.stringify(item.when.serialize()) : '';
+		const quotedSerializeCommand = JSON.stringify(item.command);
 		if (quotedSerializedWhen.length > 0) {
 			out.write(`${quotedSerializeCommand},`);
 			out.writeLine();
-			out.write(`                                     "when": ${quotedSerializedWhen} `);
+			out.write(`                                     "when": ${quotedSerializedWhen}`);
 		} else {
-			out.write(`${quotedSerializeCommand} `);
+			out.write(`${quotedSerializeCommand}`);
 		}
-		// out.write(String(item.weight1 + '-' + item.weight2));
-		out.write('}');
+		if (item.commandArgs) {
+			out.write(',');
+			out.writeLine();
+			out.write(`                                     "args": ${JSON.stringify(item.commandArgs)}`);
+		}
+		out.write(' }');
 	}
 
 	public static readUserKeybindingItem(input: IUserFriendlyKeybinding): IUserKeybindingItem {
-		const parts = (typeof input.key === 'string' ? KeybindingParser.parseUserBinding(input.key) : []);
+		const keybinding = (typeof input.key === 'string' ? KeybindingParser.parseKeybinding(input.key) : null);
 		const when = (typeof input.when === 'string' ? ContextKeyExpr.deserialize(input.when) : undefined);
 		const command = (typeof input.command === 'string' ? input.command : null);
 		const commandArgs = (typeof input.args !== 'undefined' ? input.args : undefined);
 		return {
-			parts: parts,
-			command: command,
-			commandArgs: commandArgs,
-			when: when
+			keybinding,
+			command,
+			commandArgs,
+			when,
+			_source: input
 		};
 	}
 }

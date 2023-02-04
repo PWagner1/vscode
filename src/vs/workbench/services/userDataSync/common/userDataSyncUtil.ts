@@ -4,17 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
-import { IUserDataSyncUtilService } from 'vs/platform/userDataSync/common/userDataSync';
+import { IUserDataSyncUtilService, getDefaultIgnoredSettings } from 'vs/platform/userDataSync/common/userDataSync';
 import { IStringDictionary } from 'vs/base/common/collections';
-import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
 import { FormattingOptions } from 'vs/base/common/jsonFormatter';
 import { URI } from 'vs/base/common/uri';
 import { ITextModelService } from 'vs/editor/common/services/resolverService';
-import { ITextResourcePropertiesService, ITextResourceConfigurationService } from 'vs/editor/common/services/textResourceConfigurationService';
+import { ITextResourcePropertiesService, ITextResourceConfigurationService } from 'vs/editor/common/services/textResourceConfiguration';
 
 class UserDataSyncUtilService implements IUserDataSyncUtilService {
 
-	_serviceBrand: undefined;
+	declare readonly _serviceBrand: undefined;
 
 	constructor(
 		@IKeybindingService private readonly keybindingsService: IKeybindingService,
@@ -23,7 +23,11 @@ class UserDataSyncUtilService implements IUserDataSyncUtilService {
 		@ITextResourceConfigurationService private readonly textResourceConfigurationService: ITextResourceConfigurationService,
 	) { }
 
-	public async resolveUserBindings(userBindings: string[]): Promise<IStringDictionary<string>> {
+	async resolveDefaultIgnoredSettings(): Promise<string[]> {
+		return getDefaultIgnoredSettings();
+	}
+
+	async resolveUserBindings(userBindings: string[]): Promise<IStringDictionary<string>> {
 		const keys: IStringDictionary<string> = {};
 		for (const userbinding of userBindings) {
 			keys[userbinding] = this.keybindingsService.resolveUserBinding(userbinding).map(part => part.getUserSettingsLabel()).join(' ');
@@ -42,10 +46,11 @@ class UserDataSyncUtilService implements IUserDataSyncUtilService {
 		}
 		return {
 			eol: this.textResourcePropertiesService.getEOL(resource),
-			insertSpaces: this.textResourceConfigurationService.getValue<boolean>(resource, 'editor.insertSpaces'),
+			insertSpaces: !!this.textResourceConfigurationService.getValue(resource, 'editor.insertSpaces'),
 			tabSize: this.textResourceConfigurationService.getValue(resource, 'editor.tabSize')
 		};
 	}
+
 }
 
-registerSingleton(IUserDataSyncUtilService, UserDataSyncUtilService);
+registerSingleton(IUserDataSyncUtilService, UserDataSyncUtilService, InstantiationType.Delayed);

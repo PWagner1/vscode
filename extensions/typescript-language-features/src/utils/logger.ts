@@ -4,18 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import * as nls from 'vscode-nls';
 import { memoize } from './memoize';
 
-const localize = nls.loadMessageBundle();
 
 type LogLevel = 'Trace' | 'Info' | 'Error';
 
-export default class Logger {
+export class Logger {
 
 	@memoize
 	private get output(): vscode.OutputChannel {
-		return vscode.window.createOutputChannel(localize('channelName', 'TypeScript'));
+		return vscode.window.createOutputChannel('TypeScript');
 	}
 
 	private data2String(data: any): string {
@@ -33,7 +31,7 @@ export default class Logger {
 	}
 
 	public error(message: string, data?: any): void {
-		// See https://github.com/Microsoft/TypeScript/issues/10496
+		// See https://github.com/microsoft/TypeScript/issues/10496
 		if (data && data.message === 'No content available.') {
 			return;
 		}
@@ -41,7 +39,7 @@ export default class Logger {
 	}
 
 	public logLevel(level: LogLevel, message: string, data?: any): void {
-		this.output.appendLine(`[${level}  - ${this.now()}] ${message}`);
+		this.output.appendLine(`[${level} - ${this.now()}] ${message}`);
 		if (data) {
 			this.output.appendLine(this.data2String(data));
 		}

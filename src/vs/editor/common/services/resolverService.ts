@@ -12,7 +12,7 @@ import { createDecorator } from 'vs/platform/instantiation/common/instantiation'
 export const ITextModelService = createDecorator<ITextModelService>('textModelService');
 
 export interface ITextModelService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	/**
 	 * Provided a resource URI, it will return a model reference
@@ -26,9 +26,9 @@ export interface ITextModelService {
 	registerTextModelContentProvider(scheme: string, provider: ITextModelContentProvider): IDisposable;
 
 	/**
-	 * Check if a provider for the given `scheme` exists
+	 * Check if the given resource can be resolved to a text model.
 	 */
-	hasTextModelContentProvider(scheme: string): boolean;
+	canHandleResource(resource: URI): boolean;
 }
 
 export interface ITextModelContentProvider {
@@ -58,9 +58,9 @@ export interface ITextEditorModel extends IEditorModel {
 	isReadonly(): boolean;
 
 	/**
-	 * Figure out if this model is resolved or not.
+	 * The language id of the text model if known.
 	 */
-	isResolved(): this is IResolvedTextEditorModel;
+	getLanguageId(): string | undefined;
 }
 
 export interface IResolvedTextEditorModel extends ITextEditorModel {
@@ -69,4 +69,10 @@ export interface IResolvedTextEditorModel extends ITextEditorModel {
 	 * Same as ITextEditorModel#textEditorModel, but never null.
 	 */
 	readonly textEditorModel: ITextModel;
+}
+
+export function isResolvedTextEditorModel(model: ITextEditorModel): model is IResolvedTextEditorModel {
+	const candidate = model as IResolvedTextEditorModel;
+
+	return !!candidate.textEditorModel;
 }

@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { MainContext, IExtHostContext, ExtHostThemingShape, ExtHostContext, MainThreadThemingShape } from '../common/extHost.protocol';
-import { extHostNamedCustomer } from 'vs/workbench/api/common/extHostCustomers';
+import { MainContext, ExtHostThemingShape, ExtHostContext, MainThreadThemingShape } from '../common/extHost.protocol';
+import { extHostNamedCustomer, IExtHostContext } from 'vs/workbench/services/extensions/common/extHostCustomers';
 import { IDisposable } from 'vs/base/common/lifecycle';
 import { IThemeService } from 'vs/platform/theme/common/themeService';
 
@@ -22,9 +22,10 @@ export class MainThreadTheming implements MainThreadThemingShape {
 		this._themeService = themeService;
 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostTheming);
 
-		this._themeChangeListener = this._themeService.onThemeChange(e => {
-			this._proxy.$onColorThemeChange(this._themeService.getTheme().type);
+		this._themeChangeListener = this._themeService.onDidColorThemeChange(e => {
+			this._proxy.$onColorThemeChange(this._themeService.getColorTheme().type);
 		});
+		this._proxy.$onColorThemeChange(this._themeService.getColorTheme().type);
 	}
 
 	dispose(): void {

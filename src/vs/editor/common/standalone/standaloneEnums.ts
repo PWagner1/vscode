@@ -6,297 +6,93 @@
 // THIS IS A GENERATED FILE. DO NOT EDIT DIRECTLY.
 
 
-export enum MarkerTag {
-	Unnecessary = 1,
-	Deprecated = 2
-}
-
-export enum MarkerSeverity {
-	Hint = 1,
-	Info = 2,
-	Warning = 4,
-	Error = 8
-}
-
-/**
- * Virtual Key Codes, the value does not hold any inherent meaning.
- * Inspired somewhat from https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731(v=vs.85).aspx
- * But these are "more general", as they should work across browsers & OS`s.
- */
-export enum KeyCode {
+export enum AccessibilitySupport {
 	/**
-	 * Placed first to cover the 0 value of the enum.
+	 * This should be the browser case where it is not known if a screen reader is attached or no.
 	 */
 	Unknown = 0,
-	Backspace = 1,
-	Tab = 2,
-	Enter = 3,
-	Shift = 4,
-	Ctrl = 5,
-	Alt = 6,
-	PauseBreak = 7,
-	CapsLock = 8,
-	Escape = 9,
-	Space = 10,
-	PageUp = 11,
-	PageDown = 12,
-	End = 13,
-	Home = 14,
-	LeftArrow = 15,
-	UpArrow = 16,
-	RightArrow = 17,
-	DownArrow = 18,
-	Insert = 19,
-	Delete = 20,
-	KEY_0 = 21,
-	KEY_1 = 22,
-	KEY_2 = 23,
-	KEY_3 = 24,
-	KEY_4 = 25,
-	KEY_5 = 26,
-	KEY_6 = 27,
-	KEY_7 = 28,
-	KEY_8 = 29,
-	KEY_9 = 30,
-	KEY_A = 31,
-	KEY_B = 32,
-	KEY_C = 33,
-	KEY_D = 34,
-	KEY_E = 35,
-	KEY_F = 36,
-	KEY_G = 37,
-	KEY_H = 38,
-	KEY_I = 39,
-	KEY_J = 40,
-	KEY_K = 41,
-	KEY_L = 42,
-	KEY_M = 43,
-	KEY_N = 44,
-	KEY_O = 45,
-	KEY_P = 46,
-	KEY_Q = 47,
-	KEY_R = 48,
-	KEY_S = 49,
-	KEY_T = 50,
-	KEY_U = 51,
-	KEY_V = 52,
-	KEY_W = 53,
-	KEY_X = 54,
-	KEY_Y = 55,
-	KEY_Z = 56,
-	Meta = 57,
-	ContextMenu = 58,
-	F1 = 59,
-	F2 = 60,
-	F3 = 61,
-	F4 = 62,
-	F5 = 63,
-	F6 = 64,
-	F7 = 65,
-	F8 = 66,
-	F9 = 67,
-	F10 = 68,
-	F11 = 69,
-	F12 = 70,
-	F13 = 71,
-	F14 = 72,
-	F15 = 73,
-	F16 = 74,
-	F17 = 75,
-	F18 = 76,
-	F19 = 77,
-	NumLock = 78,
-	ScrollLock = 79,
+	Disabled = 1,
+	Enabled = 2
+}
+
+export enum CodeActionTriggerType {
+	Invoke = 1,
+	Auto = 2
+}
+
+export enum CompletionItemInsertTextRule {
+	None = 0,
 	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the ';:' key
+	 * Adjust whitespace/indentation of multiline insert texts to
+	 * match the current line indentation.
 	 */
-	US_SEMICOLON = 80,
+	KeepWhitespace = 1,
 	/**
-	 * For any country/region, the '+' key
-	 * For the US standard keyboard, the '=+' key
+	 * `insertText` is a snippet.
 	 */
-	US_EQUAL = 81,
-	/**
-	 * For any country/region, the ',' key
-	 * For the US standard keyboard, the ',<' key
-	 */
-	US_COMMA = 82,
-	/**
-	 * For any country/region, the '-' key
-	 * For the US standard keyboard, the '-_' key
-	 */
-	US_MINUS = 83,
-	/**
-	 * For any country/region, the '.' key
-	 * For the US standard keyboard, the '.>' key
-	 */
-	US_DOT = 84,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the '/?' key
-	 */
-	US_SLASH = 85,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the '`~' key
-	 */
-	US_BACKTICK = 86,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the '[{' key
-	 */
-	US_OPEN_SQUARE_BRACKET = 87,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the '\|' key
-	 */
-	US_BACKSLASH = 88,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the ']}' key
-	 */
-	US_CLOSE_SQUARE_BRACKET = 89,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 * For the US standard keyboard, the ''"' key
-	 */
-	US_QUOTE = 90,
-	/**
-	 * Used for miscellaneous characters; it can vary by keyboard.
-	 */
-	OEM_8 = 91,
-	/**
-	 * Either the angle bracket key or the backslash key on the RT 102-key keyboard.
-	 */
-	OEM_102 = 92,
-	NUMPAD_0 = 93,
-	NUMPAD_1 = 94,
-	NUMPAD_2 = 95,
-	NUMPAD_3 = 96,
-	NUMPAD_4 = 97,
-	NUMPAD_5 = 98,
-	NUMPAD_6 = 99,
-	NUMPAD_7 = 100,
-	NUMPAD_8 = 101,
-	NUMPAD_9 = 102,
-	NUMPAD_MULTIPLY = 103,
-	NUMPAD_ADD = 104,
-	NUMPAD_SEPARATOR = 105,
-	NUMPAD_SUBTRACT = 106,
-	NUMPAD_DECIMAL = 107,
-	NUMPAD_DIVIDE = 108,
-	/**
-	 * Cover all key codes when IME is processing input.
-	 */
-	KEY_IN_COMPOSITION = 109,
-	ABNT_C1 = 110,
-	ABNT_C2 = 111,
-	/**
-	 * Placed last to cover the length of the enum.
-	 * Please do not depend on this value!
-	 */
-	MAX_VALUE = 112
+	InsertAsSnippet = 4
+}
+
+export enum CompletionItemKind {
+	Method = 0,
+	Function = 1,
+	Constructor = 2,
+	Field = 3,
+	Variable = 4,
+	Class = 5,
+	Struct = 6,
+	Interface = 7,
+	Module = 8,
+	Property = 9,
+	Event = 10,
+	Operator = 11,
+	Unit = 12,
+	Value = 13,
+	Constant = 14,
+	Enum = 15,
+	EnumMember = 16,
+	Keyword = 17,
+	Text = 18,
+	Color = 19,
+	File = 20,
+	Reference = 21,
+	Customcolor = 22,
+	Folder = 23,
+	TypeParameter = 24,
+	User = 25,
+	Issue = 26,
+	Snippet = 27
+}
+
+export enum CompletionItemTag {
+	Deprecated = 1
 }
 
 /**
- * The direction of a selection.
+ * How a suggest provider was triggered.
  */
-export enum SelectionDirection {
-	/**
-	 * The selection starts above where it ends.
-	 */
-	LTR = 0,
-	/**
-	 * The selection starts below where it ends.
-	 */
-	RTL = 1
-}
-
-export enum ScrollbarVisibility {
-	Auto = 1,
-	Hidden = 2,
-	Visible = 3
+export enum CompletionTriggerKind {
+	Invoke = 0,
+	TriggerCharacter = 1,
+	TriggerForIncompleteCompletions = 2
 }
 
 /**
- * Vertical Lane in the overview ruler of the editor.
+ * A positioning preference for rendering content widgets.
  */
-export enum OverviewRulerLane {
-	Left = 1,
-	Center = 2,
-	Right = 4,
-	Full = 7
-}
-
-/**
- * Position in the minimap to render the decoration.
- */
-export enum MinimapPosition {
-	Inline = 1,
-	Gutter = 2
-}
-
-/**
- * End of line character preference.
- */
-export enum EndOfLinePreference {
+export enum ContentWidgetPositionPreference {
 	/**
-	 * Use the end of line character identified in the text buffer.
+	 * Place the content widget exactly at a position
 	 */
-	TextDefined = 0,
+	EXACT = 0,
 	/**
-	 * Use line feed (\n) as the end of line character.
+	 * Place the content widget above a position
 	 */
-	LF = 1,
+	ABOVE = 1,
 	/**
-	 * Use carriage return and line feed (\r\n) as the end of line character.
+	 * Place the content widget below a position
 	 */
-	CRLF = 2
-}
-
-/**
- * The default end of line to use when instantiating models.
- */
-export enum DefaultEndOfLine {
-	/**
-	 * Use line feed (\n) as the end of line character.
-	 */
-	LF = 1,
-	/**
-	 * Use carriage return and line feed (\r\n) as the end of line character.
-	 */
-	CRLF = 2
-}
-
-/**
- * End of line character preference.
- */
-export enum EndOfLineSequence {
-	/**
-	 * Use line feed (\n) as the end of line character.
-	 */
-	LF = 0,
-	/**
-	 * Use carriage return and line feed (\r\n) as the end of line character.
-	 */
-	CRLF = 1
-}
-
-/**
- * Describes the behavior of decorations when typing/editing near their edges.
- * Note: Please do not edit the values, as they very carefully match `DecorationRangeBehavior`
- */
-export enum TrackedRangeStickiness {
-	AlwaysGrowsWhenTypingAtEdges = 0,
-	NeverGrowsWhenTypingAtEdges = 1,
-	GrowsOnlyWhenTypingBefore = 2,
-	GrowsOnlyWhenTypingAfter = 3
-}
-
-export enum ScrollType {
-	Smooth = 0,
-	Immediate = 1
+	BELOW = 2
 }
 
 /**
@@ -333,46 +129,493 @@ export enum CursorChangeReason {
 	Redo = 6
 }
 
-export enum RenderMinimap {
+/**
+ * The default end of line to use when instantiating models.
+ */
+export enum DefaultEndOfLine {
+	/**
+	 * Use line feed (\n) as the end of line character.
+	 */
+	LF = 1,
+	/**
+	 * Use carriage return and line feed (\r\n) as the end of line character.
+	 */
+	CRLF = 2
+}
+
+/**
+ * A document highlight kind.
+ */
+export enum DocumentHighlightKind {
+	/**
+	 * A textual occurrence.
+	 */
+	Text = 0,
+	/**
+	 * Read-access of a symbol, like reading a variable.
+	 */
+	Read = 1,
+	/**
+	 * Write-access of a symbol, like writing to a variable.
+	 */
+	Write = 2
+}
+
+/**
+ * Configuration options for auto indentation in the editor
+ */
+export enum EditorAutoIndentStrategy {
 	None = 0,
-	Text = 1,
-	Blocks = 2
+	Keep = 1,
+	Brackets = 2,
+	Advanced = 3,
+	Full = 4
+}
+
+export enum EditorOption {
+	acceptSuggestionOnCommitCharacter = 0,
+	acceptSuggestionOnEnter = 1,
+	accessibilitySupport = 2,
+	accessibilityPageSize = 3,
+	ariaLabel = 4,
+	autoClosingBrackets = 5,
+	autoClosingDelete = 6,
+	autoClosingOvertype = 7,
+	autoClosingQuotes = 8,
+	autoIndent = 9,
+	automaticLayout = 10,
+	autoSurround = 11,
+	bracketPairColorization = 12,
+	guides = 13,
+	codeLens = 14,
+	codeLensFontFamily = 15,
+	codeLensFontSize = 16,
+	colorDecorators = 17,
+	colorDecoratorsLimit = 18,
+	columnSelection = 19,
+	comments = 20,
+	contextmenu = 21,
+	copyWithSyntaxHighlighting = 22,
+	cursorBlinking = 23,
+	cursorSmoothCaretAnimation = 24,
+	cursorStyle = 25,
+	cursorSurroundingLines = 26,
+	cursorSurroundingLinesStyle = 27,
+	cursorWidth = 28,
+	disableLayerHinting = 29,
+	disableMonospaceOptimizations = 30,
+	domReadOnly = 31,
+	dragAndDrop = 32,
+	dropIntoEditor = 33,
+	emptySelectionClipboard = 34,
+	experimentalWhitespaceRendering = 35,
+	extraEditorClassName = 36,
+	fastScrollSensitivity = 37,
+	find = 38,
+	fixedOverflowWidgets = 39,
+	folding = 40,
+	foldingStrategy = 41,
+	foldingHighlight = 42,
+	foldingImportsByDefault = 43,
+	foldingMaximumRegions = 44,
+	unfoldOnClickAfterEndOfLine = 45,
+	fontFamily = 46,
+	fontInfo = 47,
+	fontLigatures = 48,
+	fontSize = 49,
+	fontWeight = 50,
+	fontVariations = 51,
+	formatOnPaste = 52,
+	formatOnType = 53,
+	glyphMargin = 54,
+	gotoLocation = 55,
+	hideCursorInOverviewRuler = 56,
+	hover = 57,
+	inDiffEditor = 58,
+	inlineSuggest = 59,
+	letterSpacing = 60,
+	lightbulb = 61,
+	lineDecorationsWidth = 62,
+	lineHeight = 63,
+	lineNumbers = 64,
+	lineNumbersMinChars = 65,
+	linkedEditing = 66,
+	links = 67,
+	matchBrackets = 68,
+	minimap = 69,
+	mouseStyle = 70,
+	mouseWheelScrollSensitivity = 71,
+	mouseWheelZoom = 72,
+	multiCursorMergeOverlapping = 73,
+	multiCursorModifier = 74,
+	multiCursorPaste = 75,
+	multiCursorLimit = 76,
+	occurrencesHighlight = 77,
+	overviewRulerBorder = 78,
+	overviewRulerLanes = 79,
+	padding = 80,
+	parameterHints = 81,
+	peekWidgetDefaultFocus = 82,
+	definitionLinkOpensInPeek = 83,
+	quickSuggestions = 84,
+	quickSuggestionsDelay = 85,
+	readOnly = 86,
+	renameOnType = 87,
+	renderControlCharacters = 88,
+	renderFinalNewline = 89,
+	renderLineHighlight = 90,
+	renderLineHighlightOnlyWhenFocus = 91,
+	renderValidationDecorations = 92,
+	renderWhitespace = 93,
+	revealHorizontalRightPadding = 94,
+	roundedSelection = 95,
+	rulers = 96,
+	scrollbar = 97,
+	scrollBeyondLastColumn = 98,
+	scrollBeyondLastLine = 99,
+	scrollPredominantAxis = 100,
+	selectionClipboard = 101,
+	selectionHighlight = 102,
+	selectOnLineNumbers = 103,
+	showFoldingControls = 104,
+	showUnused = 105,
+	snippetSuggestions = 106,
+	smartSelect = 107,
+	smoothScrolling = 108,
+	stickyScroll = 109,
+	stickyTabStops = 110,
+	stopRenderingLineAfter = 111,
+	suggest = 112,
+	suggestFontSize = 113,
+	suggestLineHeight = 114,
+	suggestOnTriggerCharacters = 115,
+	suggestSelection = 116,
+	tabCompletion = 117,
+	tabIndex = 118,
+	unicodeHighlighting = 119,
+	unusualLineTerminators = 120,
+	useShadowDOM = 121,
+	useTabStops = 122,
+	wordBreak = 123,
+	wordSeparators = 124,
+	wordWrap = 125,
+	wordWrapBreakAfterCharacters = 126,
+	wordWrapBreakBeforeCharacters = 127,
+	wordWrapColumn = 128,
+	wordWrapOverride1 = 129,
+	wordWrapOverride2 = 130,
+	wrappingIndent = 131,
+	wrappingStrategy = 132,
+	showDeprecated = 133,
+	inlayHints = 134,
+	editorClassName = 135,
+	pixelRatio = 136,
+	tabFocusMode = 137,
+	layoutInfo = 138,
+	wrappingInfo = 139
 }
 
 /**
- * A positioning preference for rendering content widgets.
+ * End of line character preference.
  */
-export enum ContentWidgetPositionPreference {
+export enum EndOfLinePreference {
 	/**
-	 * Place the content widget exactly at a position
+	 * Use the end of line character identified in the text buffer.
 	 */
-	EXACT = 0,
+	TextDefined = 0,
 	/**
-	 * Place the content widget above a position
+	 * Use line feed (\n) as the end of line character.
 	 */
-	ABOVE = 1,
+	LF = 1,
 	/**
-	 * Place the content widget below a position
+	 * Use carriage return and line feed (\r\n) as the end of line character.
 	 */
-	BELOW = 2
+	CRLF = 2
 }
 
 /**
- * A positioning preference for rendering overlay widgets.
+ * End of line character preference.
  */
-export enum OverlayWidgetPositionPreference {
+export enum EndOfLineSequence {
 	/**
-	 * Position the overlay widget in the top right corner
+	 * Use line feed (\n) as the end of line character.
 	 */
-	TOP_RIGHT_CORNER = 0,
+	LF = 0,
 	/**
-	 * Position the overlay widget in the bottom right corner
+	 * Use carriage return and line feed (\r\n) as the end of line character.
 	 */
-	BOTTOM_RIGHT_CORNER = 1,
+	CRLF = 1
+}
+
+/**
+ * Describes what to do with the indentation when pressing Enter.
+ */
+export enum IndentAction {
 	/**
-	 * Position the overlay widget in the top center
+	 * Insert new line and copy the previous line's indentation.
 	 */
-	TOP_CENTER = 2
+	None = 0,
+	/**
+	 * Insert new line and indent once (relative to the previous line's indentation).
+	 */
+	Indent = 1,
+	/**
+	 * Insert two new lines:
+	 *  - the first one indented which will hold the cursor
+	 *  - the second one at the same indentation level
+	 */
+	IndentOutdent = 2,
+	/**
+	 * Insert new line and outdent once (relative to the previous line's indentation).
+	 */
+	Outdent = 3
+}
+
+export enum InjectedTextCursorStops {
+	Both = 0,
+	Right = 1,
+	Left = 2,
+	None = 3
+}
+
+export enum InlayHintKind {
+	Type = 1,
+	Parameter = 2
+}
+
+/**
+ * How an {@link InlineCompletionsProvider inline completion provider} was triggered.
+ */
+export enum InlineCompletionTriggerKind {
+	/**
+	 * Completion was triggered automatically while editing.
+	 * It is sufficient to return a single completion item in this case.
+	 */
+	Automatic = 0,
+	/**
+	 * Completion was triggered explicitly by a user gesture.
+	 * Return multiple completion items to enable cycling through them.
+	 */
+	Explicit = 1
+}
+/**
+ * Virtual Key Codes, the value does not hold any inherent meaning.
+ * Inspired somewhat from https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731(v=vs.85).aspx
+ * But these are "more general", as they should work across browsers & OS`s.
+ */
+export enum KeyCode {
+	DependsOnKbLayout = -1,
+	/**
+	 * Placed first to cover the 0 value of the enum.
+	 */
+	Unknown = 0,
+	Backspace = 1,
+	Tab = 2,
+	Enter = 3,
+	Shift = 4,
+	Ctrl = 5,
+	Alt = 6,
+	PauseBreak = 7,
+	CapsLock = 8,
+	Escape = 9,
+	Space = 10,
+	PageUp = 11,
+	PageDown = 12,
+	End = 13,
+	Home = 14,
+	LeftArrow = 15,
+	UpArrow = 16,
+	RightArrow = 17,
+	DownArrow = 18,
+	Insert = 19,
+	Delete = 20,
+	Digit0 = 21,
+	Digit1 = 22,
+	Digit2 = 23,
+	Digit3 = 24,
+	Digit4 = 25,
+	Digit5 = 26,
+	Digit6 = 27,
+	Digit7 = 28,
+	Digit8 = 29,
+	Digit9 = 30,
+	KeyA = 31,
+	KeyB = 32,
+	KeyC = 33,
+	KeyD = 34,
+	KeyE = 35,
+	KeyF = 36,
+	KeyG = 37,
+	KeyH = 38,
+	KeyI = 39,
+	KeyJ = 40,
+	KeyK = 41,
+	KeyL = 42,
+	KeyM = 43,
+	KeyN = 44,
+	KeyO = 45,
+	KeyP = 46,
+	KeyQ = 47,
+	KeyR = 48,
+	KeyS = 49,
+	KeyT = 50,
+	KeyU = 51,
+	KeyV = 52,
+	KeyW = 53,
+	KeyX = 54,
+	KeyY = 55,
+	KeyZ = 56,
+	Meta = 57,
+	ContextMenu = 58,
+	F1 = 59,
+	F2 = 60,
+	F3 = 61,
+	F4 = 62,
+	F5 = 63,
+	F6 = 64,
+	F7 = 65,
+	F8 = 66,
+	F9 = 67,
+	F10 = 68,
+	F11 = 69,
+	F12 = 70,
+	F13 = 71,
+	F14 = 72,
+	F15 = 73,
+	F16 = 74,
+	F17 = 75,
+	F18 = 76,
+	F19 = 77,
+	NumLock = 78,
+	ScrollLock = 79,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the ';:' key
+	 */
+	Semicolon = 80,
+	/**
+	 * For any country/region, the '+' key
+	 * For the US standard keyboard, the '=+' key
+	 */
+	Equal = 81,
+	/**
+	 * For any country/region, the ',' key
+	 * For the US standard keyboard, the ',<' key
+	 */
+	Comma = 82,
+	/**
+	 * For any country/region, the '-' key
+	 * For the US standard keyboard, the '-_' key
+	 */
+	Minus = 83,
+	/**
+	 * For any country/region, the '.' key
+	 * For the US standard keyboard, the '.>' key
+	 */
+	Period = 84,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the '/?' key
+	 */
+	Slash = 85,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the '`~' key
+	 */
+	Backquote = 86,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the '[{' key
+	 */
+	BracketLeft = 87,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the '\|' key
+	 */
+	Backslash = 88,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the ']}' key
+	 */
+	BracketRight = 89,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 * For the US standard keyboard, the ''"' key
+	 */
+	Quote = 90,
+	/**
+	 * Used for miscellaneous characters; it can vary by keyboard.
+	 */
+	OEM_8 = 91,
+	/**
+	 * Either the angle bracket key or the backslash key on the RT 102-key keyboard.
+	 */
+	IntlBackslash = 92,
+	Numpad0 = 93,
+	Numpad1 = 94,
+	Numpad2 = 95,
+	Numpad3 = 96,
+	Numpad4 = 97,
+	Numpad5 = 98,
+	Numpad6 = 99,
+	Numpad7 = 100,
+	Numpad8 = 101,
+	Numpad9 = 102,
+	NumpadMultiply = 103,
+	NumpadAdd = 104,
+	NUMPAD_SEPARATOR = 105,
+	NumpadSubtract = 106,
+	NumpadDecimal = 107,
+	NumpadDivide = 108,
+	/**
+	 * Cover all key codes when IME is processing input.
+	 */
+	KEY_IN_COMPOSITION = 109,
+	ABNT_C1 = 110,
+	ABNT_C2 = 111,
+	AudioVolumeMute = 112,
+	AudioVolumeUp = 113,
+	AudioVolumeDown = 114,
+	BrowserSearch = 115,
+	BrowserHome = 116,
+	BrowserBack = 117,
+	BrowserForward = 118,
+	MediaTrackNext = 119,
+	MediaTrackPrevious = 120,
+	MediaStop = 121,
+	MediaPlayPause = 122,
+	LaunchMediaPlayer = 123,
+	LaunchMail = 124,
+	LaunchApp2 = 125,
+	/**
+	 * VK_CLEAR, 0x0C, CLEAR key
+	 */
+	Clear = 126,
+	/**
+	 * Placed last to cover the length of the enum.
+	 * Please do not depend on this value!
+	 */
+	MAX_VALUE = 127
+}
+
+export enum MarkerSeverity {
+	Hint = 1,
+	Info = 2,
+	Warning = 4,
+	Error = 8
+}
+
+export enum MarkerTag {
+	Unnecessary = 1,
+	Deprecated = 2
+}
+
+/**
+ * Position in the minimap to render the decoration.
+ */
+export enum MinimapPosition {
+	Inline = 1,
+	Gutter = 2
 }
 
 /**
@@ -438,105 +681,99 @@ export enum MouseTargetType {
 }
 
 /**
- * Describes what to do with the indentation when pressing Enter.
+ * A positioning preference for rendering overlay widgets.
  */
-export enum IndentAction {
+export enum OverlayWidgetPositionPreference {
 	/**
-	 * Insert new line and copy the previous line's indentation.
+	 * Position the overlay widget in the top right corner
 	 */
-	None = 0,
+	TOP_RIGHT_CORNER = 0,
 	/**
-	 * Insert new line and indent once (relative to the previous line's indentation).
+	 * Position the overlay widget in the bottom right corner
 	 */
-	Indent = 1,
+	BOTTOM_RIGHT_CORNER = 1,
 	/**
-	 * Insert two new lines:
-	 *  - the first one indented which will hold the cursor
-	 *  - the second one at the same indentation level
+	 * Position the overlay widget in the top center
 	 */
-	IndentOutdent = 2,
-	/**
-	 * Insert new line and outdent once (relative to the previous line's indentation).
-	 */
-	Outdent = 3
-}
-
-export enum CompletionItemKind {
-	Method = 0,
-	Function = 1,
-	Constructor = 2,
-	Field = 3,
-	Variable = 4,
-	Class = 5,
-	Struct = 6,
-	Interface = 7,
-	Module = 8,
-	Property = 9,
-	Event = 10,
-	Operator = 11,
-	Unit = 12,
-	Value = 13,
-	Constant = 14,
-	Enum = 15,
-	EnumMember = 16,
-	Keyword = 17,
-	Text = 18,
-	Color = 19,
-	File = 20,
-	Reference = 21,
-	Customcolor = 22,
-	Folder = 23,
-	TypeParameter = 24,
-	Snippet = 25
-}
-
-export enum CompletionItemTag {
-	Deprecated = 1
-}
-
-export enum CompletionItemInsertTextRule {
-	/**
-	 * Adjust whitespace/indentation of multiline insert texts to
-	 * match the current line indentation.
-	 */
-	KeepWhitespace = 1,
-	/**
-	 * `insertText` is a snippet.
-	 */
-	InsertAsSnippet = 4
+	TOP_CENTER = 2
 }
 
 /**
- * How a suggest provider was triggered.
+ * Vertical Lane in the overview ruler of the editor.
  */
-export enum CompletionTriggerKind {
-	Invoke = 0,
-	TriggerCharacter = 1,
-	TriggerForIncompleteCompletions = 2
+export enum OverviewRulerLane {
+	Left = 1,
+	Center = 2,
+	Right = 4,
+	Full = 7
+}
+
+export enum PositionAffinity {
+	/**
+	 * Prefers the left most position.
+	*/
+	Left = 0,
+	/**
+	 * Prefers the right most position.
+	*/
+	Right = 1,
+	/**
+	 * No preference.
+	*/
+	None = 2,
+	/**
+	 * If the given position is on injected text, prefers the position left of it.
+	*/
+	LeftOfInjectedText = 3,
+	/**
+	 * If the given position is on injected text, prefers the position right of it.
+	*/
+	RightOfInjectedText = 4
+}
+
+export enum RenderLineNumbersType {
+	Off = 0,
+	On = 1,
+	Relative = 2,
+	Interval = 3,
+	Custom = 4
+}
+
+export enum RenderMinimap {
+	None = 0,
+	Text = 1,
+	Blocks = 2
+}
+
+export enum ScrollType {
+	Smooth = 0,
+	Immediate = 1
+}
+
+export enum ScrollbarVisibility {
+	Auto = 1,
+	Hidden = 2,
+	Visible = 3
+}
+
+/**
+ * The direction of a selection.
+ */
+export enum SelectionDirection {
+	/**
+	 * The selection starts above where it ends.
+	 */
+	LTR = 0,
+	/**
+	 * The selection starts below where it ends.
+	 */
+	RTL = 1
 }
 
 export enum SignatureHelpTriggerKind {
 	Invoke = 1,
 	TriggerCharacter = 2,
 	ContentChange = 3
-}
-
-/**
- * A document highlight kind.
- */
-export enum DocumentHighlightKind {
-	/**
-	 * A textual occurrence.
-	 */
-	Text = 0,
-	/**
-	 * Read-access of a symbol, like reading a variable.
-	 */
-	Read = 1,
-	/**
-	 * Write-access of a symbol, like writing to a variable.
-	 */
-	Write = 2
 }
 
 /**
@@ -573,4 +810,97 @@ export enum SymbolKind {
 
 export enum SymbolTag {
 	Deprecated = 1
+}
+
+/**
+ * The kind of animation in which the editor's cursor should be rendered.
+ */
+export enum TextEditorCursorBlinkingStyle {
+	/**
+	 * Hidden
+	 */
+	Hidden = 0,
+	/**
+	 * Blinking
+	 */
+	Blink = 1,
+	/**
+	 * Blinking with smooth fading
+	 */
+	Smooth = 2,
+	/**
+	 * Blinking with prolonged filled state and smooth fading
+	 */
+	Phase = 3,
+	/**
+	 * Expand collapse animation on the y axis
+	 */
+	Expand = 4,
+	/**
+	 * No-Blinking
+	 */
+	Solid = 5
+}
+
+/**
+ * The style in which the editor's cursor should be rendered.
+ */
+export enum TextEditorCursorStyle {
+	/**
+	 * As a vertical line (sitting between two characters).
+	 */
+	Line = 1,
+	/**
+	 * As a block (sitting on top of a character).
+	 */
+	Block = 2,
+	/**
+	 * As a horizontal line (sitting under a character).
+	 */
+	Underline = 3,
+	/**
+	 * As a thin vertical line (sitting between two characters).
+	 */
+	LineThin = 4,
+	/**
+	 * As an outlined block (sitting on top of a character).
+	 */
+	BlockOutline = 5,
+	/**
+	 * As a thin horizontal line (sitting under a character).
+	 */
+	UnderlineThin = 6
+}
+
+/**
+ * Describes the behavior of decorations when typing/editing near their edges.
+ * Note: Please do not edit the values, as they very carefully match `DecorationRangeBehavior`
+ */
+export enum TrackedRangeStickiness {
+	AlwaysGrowsWhenTypingAtEdges = 0,
+	NeverGrowsWhenTypingAtEdges = 1,
+	GrowsOnlyWhenTypingBefore = 2,
+	GrowsOnlyWhenTypingAfter = 3
+}
+
+/**
+ * Describes how to indent wrapped lines.
+ */
+export enum WrappingIndent {
+	/**
+	 * No indentation => wrapped lines begin at column 1.
+	 */
+	None = 0,
+	/**
+	 * Same => wrapped lines get the same indentation as the parent.
+	 */
+	Same = 1,
+	/**
+	 * Indent => wrapped lines get +1 indentation toward the parent.
+	 */
+	Indent = 2,
+	/**
+	 * DeepIndent => wrapped lines get +2 indentation toward the parent.
+	 */
+	DeepIndent = 3
 }

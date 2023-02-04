@@ -3,18 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { MarkedString, CompletionItemKind, CompletionItem, DocumentSelector, SnippetString, workspace } from 'vscode';
+import { CompletionItemKind, CompletionItem, DocumentSelector, SnippetString, workspace, MarkdownString, Uri, l10n } from 'vscode';
 import { IJSONContribution, ISuggestionsCollector } from './jsonContributions';
 import { XHRRequest } from 'request-light';
 import { Location } from 'jsonc-parser';
-import { textToMarkedString } from './markedTextUtil';
 
 import * as cp from 'child_process';
-import * as nls from 'vscode-nls';
-const localize = nls.loadMessageBundle();
+import { dirname } from 'path';
 
 const LIMIT = 40;
-const SCOPED_LIMIT = 250;
 
 const USER_AGENT = 'Visual Studio Code';
 
@@ -28,17 +25,15 @@ export class PackageJSONContribution implements IJSONContribution {
 		'jsdom', 'stylus', 'when', 'readable-stream', 'aws-sdk', 'concat-stream', 'chai', 'Thenable', 'wrench'];
 
 	private knownScopes = ['@types', '@angular', '@babel', '@nuxtjs', '@vue', '@bazel'];
-	private xhr: XHRRequest;
 
 	public getDocumentSelector(): DocumentSelector {
 		return [{ language: 'json', scheme: '*', pattern: '**/package.json' }];
 	}
 
-	public constructor(xhr: XHRRequest) {
-		this.xhr = xhr;
+	public constructor(private xhr: XHRRequest, private npmCommandPath: string | undefined) {
 	}
 
-	public collectDefaultSuggestions(_fileName: string, result: ISuggestionsCollector): Thenable<any> {
+	public collectDefaultSuggestions(_resource: Uri, result: ISuggestionsCollector): Thenable<any> {
 		const defaultValue = {
 			'name': '${1:name}',
 			'description': '${2:description}',
@@ -47,11 +42,15 @@ export class PackageJSONContribution implements IJSONContribution {
 			'main': '${5:pathToMain}',
 			'dependencies': {}
 		};
-		const proposal = new CompletionItem(localize('json.package.default', 'Default package.json'));
+		const proposal = new CompletionItem(l10n.t("Default package.json"));
 		proposal.kind = CompletionItemKind.Module;
 		proposal.insertText = new SnippetString(JSON.stringify(defaultValue, null, '\t'));
 		result.add(proposal);
 		return Promise.resolve(null);
+	}
+
+	private isEnabled() {
+		return this.npmCommandPath || this.onlineEnabled();
 	}
 
 	private onlineEnabled() {
@@ -59,14 +58,14 @@ export class PackageJSONContribution implements IJSONContribution {
 	}
 
 	public collectPropertySuggestions(
-		_resource: string,
+		_resource: Uri,
 		location: Location,
 		currentWord: string,
 		addValue: boolean,
 		isLast: boolean,
 		collector: ISuggestionsCollector
 	): Thenable<any> | null {
-		if (!this.onlineEnabled()) {
+		if (!this.isEnabled()) {
 			return null;
 		}
 
@@ -77,7 +76,7 @@ export class PackageJSONContribution implements IJSONContribution {
 					if (currentWord.indexOf('/') !== -1) {
 						return this.collectScopedPackages(currentWord, addValue, isLast, collector);
 					}
-					for (let scope of this.knownScopes) {
+					for (const scope of this.knownScopes) {
 						const proposal = new CompletionItem(scope);
 						proposal.kind = CompletionItemKind.Property;
 						proposal.insertText = new SnippetString().appendText(`"${scope}/`).appendTabstop().appendText('"');
@@ -92,33 +91,32 @@ export class PackageJSONContribution implements IJSONContribution {
 					collector.setAsIncomplete();
 				}
 
-				queryUrl = `https://api.npms.io/v2/search/suggestions?size=${LIMIT}&q=${encodeURIComponent(currentWord)}`;
+				queryUrl = `https://registry.npmjs.org/-/v1/search?size=${LIMIT}&text=${encodeURIComponent(currentWord)}`;
 				return this.xhr({
 					url: queryUrl,
-					agent: USER_AGENT
+					headers: { agent: USER_AGENT }
 				}).then((success) => {
 					if (success.status === 200) {
 						try {
 							const obj = JSON.parse(success.responseText);
-							if (obj && Array.isArray(obj)) {
-								const results = <{ package: SearchPackageInfo; }[]>obj;
+							if (obj && obj.objects && Array.isArray(obj.objects)) {
+								const results = <{ package: SearchPackageInfo }[]>obj.objects;
 								for (const result of results) {
 									this.processPackage(result.package, addValue, isLast, collector);
 								}
-								if (results.length === LIMIT) {
-									collector.setAsIncomplete();
-								}
+
 							}
 						} catch (e) {
 							// ignore
 						}
+						collector.setAsIncomplete();
 					} else {
-						collector.error(localize('json.npm.error.repoaccess', 'Request to the NPM repository failed: {0}', success.responseText));
+						collector.error(l10n.t("Request to the NPM repository failed: {0}", success.responseText));
 						return 0;
 					}
 					return undefined;
 				}, (error) => {
-					collector.error(localize('json.npm.error.repoaccess', 'Request to the NPM repository failed: {0}', error.responseText));
+					collector.error(l10n.t("Request to the NPM repository failed: {0}", error.responseText));
 					return 0;
 				});
 			} else {
@@ -146,35 +144,33 @@ export class PackageJSONContribution implements IJSONContribution {
 	}
 
 	private collectScopedPackages(currentWord: string, addValue: boolean, isLast: boolean, collector: ISuggestionsCollector): Thenable<any> {
-		let segments = currentWord.split('/');
+		const segments = currentWord.split('/');
 		if (segments.length === 2 && segments[0].length > 1) {
-			let scope = segments[0].substr(1);
+			const scope = segments[0].substr(1);
 			let name = segments[1];
 			if (name.length < 4) {
 				name = '';
 			}
-			let queryUrl = `https://api.npms.io/v2/search?q=scope:${scope}%20${name}&size=250`;
+			const queryUrl = `https://registry.npmjs.com/-/v1/search?text=scope:${scope}%20${name}&size=250`;
 			return this.xhr({
 				url: queryUrl,
-				agent: USER_AGENT
+				headers: { agent: USER_AGENT }
 			}).then((success) => {
 				if (success.status === 200) {
 					try {
 						const obj = JSON.parse(success.responseText);
-						if (obj && Array.isArray(obj.results)) {
-							const objects = <{ package: SearchPackageInfo }[]>obj.results;
-							for (let object of objects) {
+						if (obj && Array.isArray(obj.objects)) {
+							const objects = <{ package: SearchPackageInfo }[]>obj.objects;
+							for (const object of objects) {
 								this.processPackage(object.package, addValue, isLast, collector);
-							}
-							if (objects.length === SCOPED_LIMIT) {
-								collector.setAsIncomplete();
 							}
 						}
 					} catch (e) {
 						// ignore
 					}
+					collector.setAsIncomplete();
 				} else {
-					collector.error(localize('json.npm.error.repoaccess', 'Request to the NPM repository failed: {0}', success.responseText));
+					collector.error(l10n.t("Request to the NPM repository failed: {0}", success.responseText));
 				}
 				return null;
 			});
@@ -182,36 +178,36 @@ export class PackageJSONContribution implements IJSONContribution {
 		return Promise.resolve(null);
 	}
 
-	public async collectValueSuggestions(_fileName: string, location: Location, result: ISuggestionsCollector): Promise<any> {
-		if (!this.onlineEnabled()) {
+	public async collectValueSuggestions(resource: Uri, location: Location, result: ISuggestionsCollector): Promise<any> {
+		if (!this.isEnabled()) {
 			return null;
 		}
 
 		if ((location.matches(['dependencies', '*']) || location.matches(['devDependencies', '*']) || location.matches(['optionalDependencies', '*']) || location.matches(['peerDependencies', '*']))) {
 			const currentKey = location.path[location.path.length - 1];
 			if (typeof currentKey === 'string') {
-				const info = await this.fetchPackageInfo(currentKey);
-				if (info && info.distTagsLatest) {
+				const info = await this.fetchPackageInfo(currentKey, resource);
+				if (info && info.version) {
 
-					let name = JSON.stringify(info.distTagsLatest);
+					let name = JSON.stringify(info.version);
 					let proposal = new CompletionItem(name);
 					proposal.kind = CompletionItemKind.Property;
 					proposal.insertText = name;
-					proposal.documentation = localize('json.npm.latestversion', 'The currently latest version of the package');
+					proposal.documentation = l10n.t("The currently latest version of the package");
 					result.add(proposal);
 
-					name = JSON.stringify('^' + info.distTagsLatest);
+					name = JSON.stringify('^' + info.version);
 					proposal = new CompletionItem(name);
 					proposal.kind = CompletionItemKind.Property;
 					proposal.insertText = name;
-					proposal.documentation = localize('json.npm.majorversion', 'Matches the most recent major version (1.x.x)');
+					proposal.documentation = l10n.t("Matches the most recent major version (1.x.x)");
 					result.add(proposal);
 
-					name = JSON.stringify('~' + info.distTagsLatest);
+					name = JSON.stringify('~' + info.version);
 					proposal = new CompletionItem(name);
 					proposal.kind = CompletionItemKind.Property;
 					proposal.insertText = name;
-					proposal.documentation = localize('json.npm.minorversion', 'Matches the most recent minor version (1.2.x)');
+					proposal.documentation = l10n.t("Matches the most recent minor version (1.2.x)");
 					result.add(proposal);
 				}
 			}
@@ -219,14 +215,33 @@ export class PackageJSONContribution implements IJSONContribution {
 		return null;
 	}
 
-	public resolveSuggestion(item: CompletionItem): Thenable<CompletionItem | null> | null {
-		if (item.kind === CompletionItemKind.Property && item.documentation === '') {
-			return this.getInfo(item.label).then(infos => {
-				if (infos.length > 0) {
-					item.documentation = infos[0];
-					if (infos.length > 1) {
-						item.detail = infos[1];
-					}
+	private getDocumentation(description: string | undefined, version: string | undefined, homepage: string | undefined): MarkdownString {
+		const str = new MarkdownString();
+		if (description) {
+			str.appendText(description);
+		}
+		if (version) {
+			str.appendText('\n\n');
+			str.appendText(l10n.t("Latest version: {0}", version));
+		}
+		if (homepage) {
+			str.appendText('\n\n');
+			str.appendText(homepage);
+		}
+		return str;
+	}
+
+	public resolveSuggestion(resource: Uri | undefined, item: CompletionItem): Thenable<CompletionItem | null> | null {
+		if (item.kind === CompletionItemKind.Property && !item.documentation) {
+
+			let name = item.label;
+			if (typeof name !== 'string') {
+				name = name.label;
+			}
+
+			return this.fetchPackageInfo(name, resource).then(info => {
+				if (info) {
+					item.documentation = this.getDocumentation(info.description, info.version, info.homepage);
 					return item;
 				}
 				return null;
@@ -235,38 +250,48 @@ export class PackageJSONContribution implements IJSONContribution {
 		return null;
 	}
 
-	private async getInfo(pack: string): Promise<string[]> {
-		let info = await this.fetchPackageInfo(pack);
-		if (info) {
-			const result: string[] = [];
-			result.push(info.description || '');
-			result.push(info.distTagsLatest ? localize('json.npm.version.hover', 'Latest version: {0}', info.distTagsLatest) : '');
-			result.push(info.homepage || '');
-			return result;
+	private isValidNPMName(name: string): boolean {
+		// following rules from https://github.com/npm/validate-npm-package-name
+		if (!name || name.length > 214 || name.match(/^[_.]/)) {
+			return false;
 		}
-
-		return [];
+		const match = name.match(/^(?:@([^/]+?)[/])?([^/]+?)$/);
+		if (match) {
+			const scope = match[1];
+			if (scope && encodeURIComponent(scope) !== scope) {
+				return false;
+			}
+			const name = match[2];
+			return encodeURIComponent(name) === name;
+		}
+		return false;
 	}
 
-	private async fetchPackageInfo(pack: string): Promise<ViewPackageInfo | undefined> {
-		let info = await this.npmView(pack);
-		if (!info) {
+	private async fetchPackageInfo(pack: string, resource: Uri | undefined): Promise<ViewPackageInfo | undefined> {
+		if (!this.isValidNPMName(pack)) {
+			return undefined; // avoid unnecessary lookups
+		}
+		let info: ViewPackageInfo | undefined;
+		if (this.npmCommandPath) {
+			info = await this.npmView(this.npmCommandPath, pack, resource);
+		}
+		if (!info && this.onlineEnabled()) {
 			info = await this.npmjsView(pack);
 		}
 		return info;
 	}
 
-
-	private npmView(pack: string): Promise<ViewPackageInfo | undefined> {
+	private npmView(npmCommandPath: string, pack: string, resource: Uri | undefined): Promise<ViewPackageInfo | undefined> {
 		return new Promise((resolve, _reject) => {
-			const command = 'npm view --json ' + pack + ' description dist-tags.latest homepage';
-			cp.exec(command, (error, stdout) => {
+			const args = ['view', '--json', pack, 'description', 'dist-tags.latest', 'homepage', 'version'];
+			const cwd = resource && resource.scheme === 'file' ? dirname(resource.fsPath) : undefined;
+			cp.execFile(npmCommandPath, args, { cwd }, (error, stdout) => {
 				if (!error) {
 					try {
 						const content = JSON.parse(stdout);
 						resolve({
 							description: content['description'],
-							distTagsLatest: content['dist-tags.latest'],
+							version: content['dist-tags.latest'] || content['version'],
 							homepage: content['homepage']
 						});
 						return;
@@ -280,23 +305,19 @@ export class PackageJSONContribution implements IJSONContribution {
 	}
 
 	private async npmjsView(pack: string): Promise<ViewPackageInfo | undefined> {
-		const queryUrl = 'https://registry.npmjs.org/' + encodeURIComponent(pack).replace(/%40/g, '@');
+		const queryUrl = 'https://registry.npmjs.org/' + encodeURIComponent(pack);
 		try {
 			const success = await this.xhr({
 				url: queryUrl,
-				agent: USER_AGENT
+				headers: { agent: USER_AGENT }
 			});
 			const obj = JSON.parse(success.responseText);
-			if (obj) {
-				const latest = obj && obj['dist-tags'] && obj['dist-tags']['latest'];
-				if (latest) {
-					return {
-						description: obj.description || '',
-						distTagsLatest: latest,
-						homepage: obj.homepage || ''
-					};
-				}
-			}
+			const version = obj['dist-tags']?.latest || Object.keys(obj.versions).pop() || '';
+			return {
+				description: obj.description || '',
+				version,
+				homepage: obj.homepage || ''
+			};
 		}
 		catch (e) {
 			//ignore
@@ -304,13 +325,16 @@ export class PackageJSONContribution implements IJSONContribution {
 		return undefined;
 	}
 
-	public getInfoContribution(_fileName: string, location: Location): Thenable<MarkedString[] | null> | null {
+	public getInfoContribution(resource: Uri, location: Location): Thenable<MarkdownString[] | null> | null {
+		if (!this.isEnabled()) {
+			return null;
+		}
 		if ((location.matches(['dependencies', '*']) || location.matches(['devDependencies', '*']) || location.matches(['optionalDependencies', '*']) || location.matches(['peerDependencies', '*']))) {
 			const pack = location.path[location.path.length - 1];
 			if (typeof pack === 'string') {
-				return this.getInfo(pack).then(infos => {
-					if (infos.length) {
-						return [infos.map(textToMarkedString).join('\n\n')];
+				return this.fetchPackageInfo(pack, resource).then(info => {
+					if (info) {
+						return [this.getDocumentation(info.description, info.version, info.homepage)];
 					}
 					return null;
 				});
@@ -339,7 +363,7 @@ export class PackageJSONContribution implements IJSONContribution {
 			proposal.kind = CompletionItemKind.Property;
 			proposal.insertText = insertText;
 			proposal.filterText = JSON.stringify(name);
-			proposal.documentation = pack.description || '';
+			proposal.documentation = this.getDocumentation(pack.description, pack.version, pack?.links?.homepage);
 			collector.add(proposal);
 		}
 	}
@@ -349,10 +373,11 @@ interface SearchPackageInfo {
 	name: string;
 	description?: string;
 	version?: string;
+	links?: { homepage?: string };
 }
 
 interface ViewPackageInfo {
 	description: string;
-	distTagsLatest?: string;
+	version?: string;
 	homepage?: string;
 }

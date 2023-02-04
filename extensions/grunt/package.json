@@ -16,16 +16,20 @@
     "compile": "gulp compile-extension:grunt",
     "watch": "gulp watch-extension:grunt"
   },
-  "dependencies": {
-    "vscode-nls": "^4.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^12.11.7"
+    "@types/node": "16.x"
   },
   "main": "./out/main",
   "activationEvents": [
-    "onCommand:workbench.action.tasks.runTask"
+    "onTaskType:grunt"
   ],
+  "capabilities": {
+    "virtualWorkspaces": false,
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
   "contributes": {
     "configuration": {
       "id": "grunt",
@@ -33,13 +37,13 @@
       "title": "Grunt",
       "properties": {
         "grunt.autoDetect": {
-          "scope": "resource",
+          "scope": "application",
           "type": "string",
           "enum": [
             "off",
             "on"
           ],
-          "default": "on",
+          "default": "off",
           "description": "%config.grunt.autoDetect%"
         }
       }
@@ -63,8 +67,13 @@
             "type": "string",
             "description": "%grunt.taskDefinition.file.description%"
           }
-        }
+        },
+        "when": "shellExecutionSupported"
       }
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/vscode.git"
   }
 }

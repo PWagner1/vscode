@@ -7,7 +7,11 @@
 			}
 		},
 		{
-			"scope": ["meta.embedded", "source.groovy.embedded"],
+			"scope": [
+				"meta.embedded",
+				"source.groovy.embedded",
+				"string meta.image.inline.markdown"
+			],
 			"settings": {
 				"foreground": "#6688cc"
 			}
@@ -172,14 +176,14 @@
 			"scope": "invalid",
 			"settings": {
 				"fontStyle": "",
-				"foreground": "#F8F8F0"
+				"foreground": "#A22D44"
 			}
 		},
 		{
 			"name": "Invalid deprecated",
 			"scope": "invalid.deprecated",
 			"settings": {
-				"foreground": "#F8F8F0"
+				"foreground": "#A22D44"
 			}
 		},
 		{
@@ -234,6 +238,26 @@
 			}
 		},
 		{
+			"name": "Markup: Strong",
+			"scope": "markup.bold",
+			"settings": {
+				"fontStyle": "bold"
+			}
+		},
+		{
+			"name": "Markup: Emphasis",
+			"scope": "markup.italic",
+			"settings": {
+				"fontStyle": "italic"
+			}
+		},
+		{
+			"scope": "markup.strikethrough",
+			"settings": {
+				"fontStyle": "strikethrough"
+			}
+		},
+		{
 			"name": "Markup Inline",
 			"scope": "markup.inline.raw",
 			"settings": {
@@ -242,11 +266,14 @@
 			}
 		},
 		{
-			"name": "Markup Setext Header",
-			"scope": "markup.heading.setext",
+			"name": "Markup Headings",
+			"scope": [
+				"markup.heading",
+				"markup.heading.setext"
+			],
 			"settings": {
-				"fontStyle": "",
-				"foreground": "#ddbb88"
+				"fontStyle": "bold",
+				"foreground": "#6688cc"
 			}
 		}
 	],
@@ -286,7 +313,7 @@
 
 		"list.activeSelectionBackground": "#08286b",
 		// "list.activeSelectionForeground": "",
-		"list.focusBackground": "#08286b",
+		"quickInputList.focusBackground": "#08286b",
 		"list.hoverBackground": "#061940",
 		"list.inactiveSelectionBackground": "#152037",
 		"list.dropBackground": "#041D52",
@@ -345,6 +372,8 @@
 		// "peekViewTitleLabel.foreground": "",
 		// "peekViewTitleDescription.foreground": "",
 
+		// Ports
+		"ports.iconRunningProcessForeground": "#80a2c2",
 		// Editor: Diff
 		"diffEditor.insertedTextBackground": "#31958A55",
 		// "diffEditor.insertedTextBorder": "",
@@ -373,13 +402,14 @@
 		"tab.inactiveBackground": "#10192c",
 		// "tab.activeForeground": "",
 		// "tab.inactiveForeground": "",
+		"tab.lastPinnedBorder": "#2b3c5d",
 
 		// Workbench: Activity Bar
 		"activityBar.background": "#051336",
 		// "activityBar.foreground": "",
 		// "activityBarBadge.background": "",
 		// "activityBarBadge.foreground": "",
-		// "activityBar.dropBackground": "",
+		"activityBarItem.profilesBackground": "#082877",
 
 		// Workbench: Panel
 		// "panel.background": "",
@@ -434,5 +464,6 @@
 		"terminal.ansiBrightMagenta": "#d778ff",
 		"terminal.ansiBrightCyan": "#78ffff",
 		"terminal.ansiBrightWhite": "#ffffff"
-	}
+	},
+	"semanticHighlighting": true
 }

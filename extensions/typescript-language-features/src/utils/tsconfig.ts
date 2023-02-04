@@ -5,35 +5,63 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import * as Proto from '../protocol';
+import type * as Proto from '../protocol';
+import { ITypeScriptServiceClient, ServerResponse } from '../typescriptService';
+import { nulToken } from '../utils/cancellation';
 import { TypeScriptServiceConfiguration } from './configuration';
+
+
+export const enum ProjectType {
+	TypeScript,
+	JavaScript,
+}
 
 export function isImplicitProjectConfigFile(configFileName: string) {
 	return configFileName.startsWith('/dev/null/');
 }
 
+const defaultProjectConfig = Object.freeze<Proto.ExternalProjectCompilerOptions>({
+	module: 'ESNext' as Proto.ModuleKind,
+	moduleResolution: 'Node' as Proto.ModuleResolutionKind,
+	target: 'ES2020' as Proto.ScriptTarget,
+	jsx: 'react' as Proto.JsxEmit,
+});
+
 export function inferredProjectCompilerOptions(
-	isTypeScriptProject: boolean,
+	projectType: ProjectType,
 	serviceConfig: TypeScriptServiceConfiguration,
 ): Proto.ExternalProjectCompilerOptions {
-	const projectConfig: Proto.ExternalProjectCompilerOptions = {
-		module: 'commonjs' as Proto.ModuleKind,
-		target: 'es2016' as Proto.ScriptTarget,
-		jsx: 'preserve' as Proto.JsxEmit,
-	};
+	const projectConfig = { ...defaultProjectConfig };
 
-	if (serviceConfig.checkJs) {
+	if (serviceConfig.implicitProjectConfiguration.checkJs) {
 		projectConfig.checkJs = true;
-		if (isTypeScriptProject) {
+		if (projectType === ProjectType.TypeScript) {
 			projectConfig.allowJs = true;
 		}
 	}
 
-	if (serviceConfig.experimentalDecorators) {
+	if (serviceConfig.implicitProjectConfiguration.experimentalDecorators) {
 		projectConfig.experimentalDecorators = true;
 	}
 
-	if (isTypeScriptProject) {
+	if (serviceConfig.implicitProjectConfiguration.strictNullChecks) {
+		projectConfig.strictNullChecks = true;
+	}
+
+	if (serviceConfig.implicitProjectConfiguration.strictFunctionTypes) {
+		projectConfig.strictFunctionTypes = true;
+	}
+
+
+	if (serviceConfig.implicitProjectConfiguration.module) {
+		projectConfig.module = serviceConfig.implicitProjectConfiguration.module as Proto.ModuleKind;
+	}
+
+	if (serviceConfig.implicitProjectConfiguration.target) {
+		projectConfig.target = serviceConfig.implicitProjectConfiguration.target as Proto.ScriptTarget;
+	}
+
+	if (projectType === ProjectType.TypeScript) {
 		projectConfig.sourceMap = true;
 	}
 
@@ -41,10 +69,10 @@ export function inferredProjectCompilerOptions(
 }
 
 function inferredProjectConfigSnippet(
-	isTypeScriptProject: boolean,
+	projectType: ProjectType,
 	config: TypeScriptServiceConfiguration
 ) {
-	const baseConfig = inferredProjectCompilerOptions(isTypeScriptProject, config);
+	const baseConfig = inferredProjectCompilerOptions(projectType, config);
 	const compilerOptions = Object.keys(baseConfig).map(key => `"${key}": ${JSON.stringify(baseConfig[key])}`);
 	return new vscode.SnippetString(`{
 	"compilerOptions": {
@@ -57,13 +85,13 @@ function inferredProjectConfigSnippet(
 }`);
 }
 
-export async function openOrCreateConfigFile(
-	isTypeScriptProject: boolean,
+export async function openOrCreateConfig(
+	projectType: ProjectType,
 	rootPath: string,
-	config: TypeScriptServiceConfiguration
+	configuration: TypeScriptServiceConfiguration,
 ): Promise<vscode.TextEditor | null> {
-	const configFile = vscode.Uri.file(path.join(rootPath, isTypeScriptProject ? 'tsconfig.json' : 'jsconfig.json'));
-	const col = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
+	const configFile = vscode.Uri.file(path.join(rootPath, projectType === ProjectType.TypeScript ? 'tsconfig.json' : 'jsconfig.json'));
+	const col = vscode.window.activeTextEditor?.viewColumn;
 	try {
 		const doc = await vscode.workspace.openTextDocument(configFile);
 		return vscode.window.showTextDocument(doc, col);
@@ -71,8 +99,75 @@ export async function openOrCreateConfigFile(
 		const doc = await vscode.workspace.openTextDocument(configFile.with({ scheme: 'untitled' }));
 		const editor = await vscode.window.showTextDocument(doc, col);
 		if (editor.document.getText().length === 0) {
-			await editor.insertSnippet(inferredProjectConfigSnippet(isTypeScriptProject, config));
+			await editor.insertSnippet(inferredProjectConfigSnippet(projectType, configuration));
 		}
 		return editor;
 	}
 }
+
+export async function openProjectConfigOrPromptToCreate(
+	projectType: ProjectType,
+	client: ITypeScriptServiceClient,
+	rootPath: string,
+	configFileName: string,
+): Promise<void> {
+	if (!isImplicitProjectConfigFile(configFileName)) {
+		const doc = await vscode.workspace.openTextDocument(configFileName);
+		vscode.window.showTextDocument(doc, vscode.window.activeTextEditor?.viewColumn);
+		return;
+	}
+
+	const CreateConfigItem: vscode.MessageItem = {
+		title: projectType === ProjectType.TypeScript
+			? vscode.l10n.t("Configure tsconfig.json")
+			: vscode.l10n.t("Configure jsconfig.json"),
+	};
+
+	const selected = await vscode.window.showInformationMessage(
+		(projectType === ProjectType.TypeScript
+			? vscode.l10n.t("File is not part of a TypeScript project. View the [tsconfig.json documentation]({0}) to learn more.", 'https://go.microsoft.com/fwlink/?linkid=841896')
+			: vscode.l10n.t("File is not part of a JavaScript project. View the [jsconfig.json documentation]({0}) to learn more.", 'https://go.microsoft.com/fwlink/?linkid=759670')
+		),
+		CreateConfigItem);
+
+	switch (selected) {
+		case CreateConfigItem:
+			openOrCreateConfig(projectType, rootPath, client.configuration);
+			return;
+	}
+}
+
+export async function openProjectConfigForFile(
+	projectType: ProjectType,
+	client: ITypeScriptServiceClient,
+	resource: vscode.Uri,
+): Promise<void> {
+	const rootPath = client.getWorkspaceRootForResource(resource);
+	if (!rootPath) {
+		vscode.window.showInformationMessage(
+			vscode.l10n.t("Please open a folder in VS Code to use a TypeScript or JavaScript project"));
+		return;
+	}
+
+	const file = client.toTsFilePath(resource);
+	// TSServer errors when 'projectInfo' is invoked on a non js/ts file
+	if (!file || !client.toTsFilePath(resource)) {
+		vscode.window.showWarningMessage(
+			vscode.l10n.t("Could not determine TypeScript or JavaScript project. Unsupported file type"));
+		return;
+	}
+
+	let res: ServerResponse.Response<Proto.ProjectInfoResponse> | undefined;
+	try {
+		res = await client.execute('projectInfo', { file, needFileNameList: false }, nulToken);
+	} catch {
+		// noop
+	}
+
+	if (res?.type !== 'response' || !res.body) {
+		vscode.window.showWarningMessage(vscode.l10n.t("Could not determine TypeScript or JavaScript project"));
+		return;
+	}
+	return openProjectConfigOrPromptToCreate(projectType, client, rootPath, res.body.configFileName);
+}
+

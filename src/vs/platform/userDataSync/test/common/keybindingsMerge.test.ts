@@ -5,10 +5,7 @@
 
 import * as assert from 'assert';
 import { merge } from 'vs/platform/userDataSync/common/keybindingsMerge';
-import { IStringDictionary } from 'vs/base/common/collections';
-import { IUserDataSyncUtilService } from 'vs/platform/userDataSync/common/userDataSync';
-import { FormattingOptions } from 'vs/base/common/jsonFormatter';
-import { URI } from 'vs/base/common/uri';
+import { TestUserDataSyncUtilService } from 'vs/platform/userDataSync/test/common/userDataSyncClient';
 
 suite('KeybindingsMerge - No Conflicts', () => {
 
@@ -18,7 +15,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote are same with similar when contexts', async () => {
@@ -27,7 +24,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote has entries in different order', async () => {
@@ -42,7 +39,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote are same with multiple entries', async () => {
@@ -59,7 +56,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote are same with different base content', async () => {
@@ -80,7 +77,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote are same with multiple entries in different order', async () => {
@@ -97,7 +94,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local and remote are same when remove entry is in different order', async () => {
@@ -114,7 +111,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(!actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when a new entry is added to remote', async () => {
@@ -130,7 +127,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when multiple new entries are added to remote', async () => {
@@ -147,7 +144,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when multiple new entries are added to remote from base and local has not changed', async () => {
@@ -164,7 +161,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when an entry is removed from remote from base and local has not changed', async () => {
@@ -180,7 +177,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when an entry (same command) is removed from remote from base and local has not changed', async () => {
@@ -194,7 +191,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when an entry is updated in remote from base and local has not changed', async () => {
@@ -207,7 +204,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when a command with multiple entries is updated from remote from base and local has not changed', async () => {
@@ -226,7 +223,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when remote has moved forwareded with multiple changes and local stays with base', async () => {
@@ -249,7 +246,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, localContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, remoteContent);
+		assert.strictEqual(actual.mergeContent, remoteContent);
 	});
 
 	test('merge when a new entry is added to local', async () => {
@@ -265,7 +262,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when multiple new entries are added to local', async () => {
@@ -282,7 +279,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when multiple new entries are added to local from base and remote is not changed', async () => {
@@ -299,7 +296,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when an entry is removed from local from base and remote has not changed', async () => {
@@ -315,7 +312,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when an entry (with same command) is removed from local from base and remote has not changed', async () => {
@@ -329,7 +326,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when an entry is updated in local from base and remote has not changed', async () => {
@@ -342,7 +339,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when a command with multiple entries is updated from local from base and remote has not changed', async () => {
@@ -361,7 +358,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, localContent);
+		assert.strictEqual(actual.mergeContent, localContent);
 	});
 
 	test('merge when local has moved forwareded with multiple changes and remote stays with base', async () => {
@@ -393,7 +390,7 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, remoteContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, expected);
+		assert.strictEqual(actual.mergeContent, expected);
 	});
 
 	test('merge when local and remote has moved forwareded with conflicts', async () => {
@@ -434,13 +431,8 @@ suite('KeybindingsMerge - No Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(!actual.hasConflicts);
-		assert.equal(actual.mergeContent, expected);
+		assert.strictEqual(actual.mergeContent, expected);
 	});
-
-});
-
-
-suite('KeybindingsMerge - Conflicts', () => {
 
 	test('merge when local and remote with one entry but different value', async () => {
 		const localContent = stringify([{ key: 'alt+d', command: 'a', when: 'editorTextFocus && !editorReadonly' }]);
@@ -448,24 +440,14 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+d",
 		"command": "a",
 		"when": "editorTextFocus && !editorReadonly"
 	}
-]
-=======
-[
-	{
-		"key": "alt+c",
-		"command": "a",
-		"when": "editorTextFocus && !editorReadonly"
-	}
-]
->>>>>>> remote`);
+]`);
 	});
 
 	test('merge when local and remote with different keybinding', async () => {
@@ -480,9 +462,8 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, null);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+d",
 		"command": "a",
@@ -493,21 +474,7 @@ suite('KeybindingsMerge - Conflicts', () => {
 		"command": "-a",
 		"when": "editorTextFocus && !editorReadonly"
 	}
-]
-=======
-[
-	{
-		"key": "alt+c",
-		"command": "a",
-		"when": "editorTextFocus && !editorReadonly"
-	},
-	{
-		"key": "alt+a",
-		"command": "-a",
-		"when": "editorTextFocus && !editorReadonly"
-	}
-]
->>>>>>> remote`);
+]`);
 	});
 
 	test('merge when the entry is removed in local but updated in remote', async () => {
@@ -517,18 +484,8 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[]
-=======
-[
-	{
-		"key": "alt+c",
-		"command": "a",
-		"when": "editorTextFocus && !editorReadonly"
-	}
-]
->>>>>>> remote`);
+		assert.strictEqual(actual.mergeContent,
+			`[]`);
 	});
 
 	test('merge when the entry is removed in local but updated in remote and a new entry is added in local', async () => {
@@ -538,23 +495,13 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+b",
 		"command": "b"
 	}
-]
-=======
-[
-	{
-		"key": "alt+c",
-		"command": "a",
-		"when": "editorTextFocus && !editorReadonly"
-	}
-]
->>>>>>> remote`);
+]`);
 	});
 
 	test('merge when the entry is removed in remote but updated in local', async () => {
@@ -564,18 +511,14 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+c",
 		"command": "a",
 		"when": "editorTextFocus && !editorReadonly"
 	}
-]
-=======
-[]
->>>>>>> remote`);
+]`);
 	});
 
 	test('merge when the entry is removed in remote but updated in local and a new entry is added in remote', async () => {
@@ -585,9 +528,8 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+c",
 		"command": "a",
@@ -597,15 +539,7 @@ suite('KeybindingsMerge - Conflicts', () => {
 		"key": "alt+b",
 		"command": "b"
 	}
-]
-=======
-[
-	{
-		"key": "alt+b",
-		"command": "b"
-	}
-]
->>>>>>> remote`);
+]`);
 	});
 
 	test('merge when local and remote has moved forwareded with conflicts', async () => {
@@ -637,9 +571,8 @@ suite('KeybindingsMerge - Conflicts', () => {
 		const actual = await mergeKeybindings(localContent, remoteContent, baseContent);
 		assert.ok(actual.hasChanges);
 		assert.ok(actual.hasConflicts);
-		assert.equal(actual.mergeContent,
-			`<<<<<<< local
-[
+		assert.strictEqual(actual.mergeContent,
+			`[
 	{
 		"key": "alt+d",
 		"command": "-f"
@@ -670,65 +603,17 @@ suite('KeybindingsMerge - Conflicts', () => {
 		"command": "g",
 		"when": "context2"
 	}
-]
-=======
-[
-	{
-		"key": "alt+a",
-		"command": "f"
-	},
-	{
-		"key": "cmd+c",
-		"command": "-c"
-	},
-	{
-		"key": "cmd+d",
-		"command": "d"
-	},
-	{
-		"key": "alt+d",
-		"command": "-f"
-	},
-	{
-		"key": "alt+c",
-		"command": "c",
-		"when": "context1"
-	},
-	{
-		"key": "alt+g",
-		"command": "g",
-		"when": "context2"
-	}
-]
->>>>>>> remote`);
+]`);
 	});
 
 });
 
-
 async function mergeKeybindings(localContent: string, remoteContent: string, baseContent: string | null) {
-	const userDataSyncUtilService = new MockUserDataSyncUtilService();
+	const userDataSyncUtilService = new TestUserDataSyncUtilService();
 	const formattingOptions = await userDataSyncUtilService.resolveFormattingOptions();
 	return merge(localContent, remoteContent, baseContent, formattingOptions, userDataSyncUtilService);
 }
 
 function stringify(value: any): string {
 	return JSON.stringify(value, null, '\t');
-}
-
-class MockUserDataSyncUtilService implements IUserDataSyncUtilService {
-
-	_serviceBrand: any;
-
-	async resolveUserBindings(userbindings: string[]): Promise<IStringDictionary<string>> {
-		const keys: IStringDictionary<string> = {};
-		for (const keybinding of userbindings) {
-			keys[keybinding] = keybinding;
-		}
-		return keys;
-	}
-
-	async resolveFormattingOptions(file?: URI): Promise<FormattingOptions> {
-		return { eol: '\n', insertSpaces: false, tabSize: 4 };
-	}
 }

@@ -8,7 +8,7 @@
  */
 
 import * as vscode from 'vscode';
-import * as Proto from '../protocol';
+import type * as Proto from '../protocol';
 import * as PConst from '../protocol.const';
 import { ITypeScriptServiceClient } from '../typescriptService';
 
@@ -107,7 +107,7 @@ export namespace SymbolKind {
 			case PConst.Kind.interface: return vscode.SymbolKind.Interface;
 			case PConst.Kind.indexSignature: return vscode.SymbolKind.Method;
 			case PConst.Kind.callSignature: return vscode.SymbolKind.Method;
-			case PConst.Kind.memberFunction: return vscode.SymbolKind.Method;
+			case PConst.Kind.method: return vscode.SymbolKind.Method;
 			case PConst.Kind.memberVariable: return vscode.SymbolKind.Property;
 			case PConst.Kind.memberGetAccessor: return vscode.SymbolKind.Property;
 			case PConst.Kind.memberSetAccessor: return vscode.SymbolKind.Property;
@@ -123,6 +123,26 @@ export namespace SymbolKind {
 			case PConst.Kind.typeParameter: return vscode.SymbolKind.TypeParameter;
 			case PConst.Kind.string: return vscode.SymbolKind.String;
 			default: return vscode.SymbolKind.Variable;
+		}
+	}
+}
+
+export namespace CompletionTriggerKind {
+	export function toProtocolCompletionTriggerKind(kind: vscode.CompletionTriggerKind): Proto.CompletionTriggerKind {
+		switch (kind) {
+			case vscode.CompletionTriggerKind.Invoke: return 1;
+			case vscode.CompletionTriggerKind.TriggerCharacter: return 2;
+			case vscode.CompletionTriggerKind.TriggerForIncompleteCompletions: return 3;
+		}
+	}
+}
+
+export namespace OrganizeImportsMode {
+	export function toProtocolOrganizeImportsMode(mode: PConst.OrganizeImportsMode): Proto.OrganizeImportsMode {
+		switch (mode) {
+			case PConst.OrganizeImportsMode.All: return 'All' as Proto.OrganizeImportsMode.All;
+			case PConst.OrganizeImportsMode.SortAndCombine: return 'SortAndCombine' as Proto.OrganizeImportsMode.SortAndCombine;
+			case PConst.OrganizeImportsMode.RemoveUnused: return 'RemoveUnused' as Proto.OrganizeImportsMode.RemoveUnused;
 		}
 	}
 }

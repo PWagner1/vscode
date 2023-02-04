@@ -9,14 +9,19 @@ import { ICodeEditor } from 'vs/editor/browser/editorBrowser';
 import { RenderLineNumbersType, TextEditorCursorStyle, cursorStyleToString, EditorOption } from 'vs/editor/common/config/editorOptions';
 import { IRange, Range } from 'vs/editor/common/core/range';
 import { ISelection, Selection } from 'vs/editor/common/core/selection';
-import * as editorCommon from 'vs/editor/common/editorCommon';
-import { IIdentifiedSingleEditOperation, ISingleEditOperation, ITextModel, ITextModelUpdateOptions } from 'vs/editor/common/model';
-import { IModelService } from 'vs/editor/common/services/modelService';
-import { SnippetController2 } from 'vs/editor/contrib/snippet/snippetController2';
+import { IDecorationOptions, ScrollType } from 'vs/editor/common/editorCommon';
+import { ITextModel, ITextModelUpdateOptions } from 'vs/editor/common/model';
+import { ISingleEditOperation } from 'vs/editor/common/core/editOperation';
+import { IModelService } from 'vs/editor/common/services/model';
+import { SnippetController2 } from 'vs/editor/contrib/snippet/browser/snippetController2';
 import { IApplyEditsOptions, IEditorPropertiesChangeData, IResolvedTextEditorConfiguration, ITextEditorConfigurationUpdate, IUndoStopOptions, TextEditorRevealType } from 'vs/workbench/api/common/extHost.protocol';
-import { IEditor } from 'vs/workbench/common/editor';
+import { IEditorPane } from 'vs/workbench/common/editor';
 import { withNullAsUndefined } from 'vs/base/common/types';
 import { equals } from 'vs/base/common/arrays';
+import { CodeEditorStateFlag, EditorState } from 'vs/editor/contrib/editorState/browser/editorState';
+import { IClipboardService } from 'vs/platform/clipboard/common/clipboardService';
+import { SnippetParser } from 'vs/editor/contrib/snippet/browser/snippetParser';
+import { MainThreadDocuments } from 'vs/workbench/api/browser/mainThreadDocuments';
 
 export interface IFocusTracker {
 	onGainedFocus(): void;
@@ -157,8 +162,10 @@ export class MainThreadTextEditorProperties {
 export class MainThreadTextEditor {
 
 	private readonly _id: string;
-	private _model: ITextModel;
+	private readonly _model: ITextModel;
+	private readonly _mainThreadDocuments: MainThreadDocuments;
 	private readonly _modelService: IModelService;
+	private readonly _clipboardService: IClipboardService;
 	private readonly _modelListeners = new DisposableStore();
 	private _codeEditor: ICodeEditor | null;
 	private readonly _focusTracker: IFocusTracker;
@@ -172,14 +179,18 @@ export class MainThreadTextEditor {
 		model: ITextModel,
 		codeEditor: ICodeEditor,
 		focusTracker: IFocusTracker,
-		modelService: IModelService
+		mainThreadDocuments: MainThreadDocuments,
+		modelService: IModelService,
+		clipboardService: IClipboardService,
 	) {
 		this._id = id;
 		this._model = model;
 		this._codeEditor = null;
 		this._properties = null;
 		this._focusTracker = focusTracker;
+		this._mainThreadDocuments = mainThreadDocuments;
 		this._modelService = modelService;
+		this._clipboardService = clipboardService;
 
 		this._onPropertiesChanged = new Emitter<IEditorPropertiesChangeData>();
 
@@ -192,7 +203,6 @@ export class MainThreadTextEditor {
 	}
 
 	public dispose(): void {
-		this._model = null!;
 		this._modelListeners.dispose();
 		this._codeEditor = null;
 		this._codeEditorListeners.dispose();
@@ -251,21 +261,66 @@ export class MainThreadTextEditor {
 				this._focusTracker.onLostFocus();
 			}));
 
+			let nextSelectionChangeSource: string | null = null;
+			this._codeEditorListeners.add(this._mainThreadDocuments.onIsCaughtUpWithContentChanges((uri) => {
+				if (uri.toString() === this._model.uri.toString()) {
+					const selectionChangeSource = nextSelectionChangeSource;
+					nextSelectionChangeSource = null;
+					this._updatePropertiesNow(selectionChangeSource);
+				}
+			}));
+
+			const isValidCodeEditor = () => {
+				// Due to event timings, it is possible that there is a model change event not yet delivered to us.
+				// > e.g. a model change event is emitted to a listener which then decides to update editor options
+				// > In this case the editor configuration change event reaches us first.
+				// So simply check that the model is still attached to this code editor
+				return (this._codeEditor && this._codeEditor.getModel() === this._model);
+			};
+
+			const updateProperties = (selectionChangeSource: string | null) => {
+				// Some editor events get delivered faster than model content changes. This is
+				// problematic, as this leads to editor properties reaching the extension host
+				// too soon, before the model content change that was the root cause.
+				//
+				// If this case is identified, then let's update editor properties on the next model
+				// content change instead.
+				if (this._mainThreadDocuments.isCaughtUpWithContentChanges(this._model.uri)) {
+					nextSelectionChangeSource = null;
+					this._updatePropertiesNow(selectionChangeSource);
+				} else {
+					// update editor properties on the next model content change
+					nextSelectionChangeSource = selectionChangeSource;
+				}
+			};
+
 			this._codeEditorListeners.add(this._codeEditor.onDidChangeCursorSelection((e) => {
 				// selection
-				this._updatePropertiesNow(e.source);
+				if (!isValidCodeEditor()) {
+					return;
+				}
+				updateProperties(e.source);
 			}));
-			this._codeEditorListeners.add(this._codeEditor.onDidChangeConfiguration(() => {
+			this._codeEditorListeners.add(this._codeEditor.onDidChangeConfiguration((e) => {
 				// options
-				this._updatePropertiesNow(null);
+				if (!isValidCodeEditor()) {
+					return;
+				}
+				updateProperties(null);
 			}));
 			this._codeEditorListeners.add(this._codeEditor.onDidLayoutChange(() => {
 				// visibleRanges
-				this._updatePropertiesNow(null);
+				if (!isValidCodeEditor()) {
+					return;
+				}
+				updateProperties(null);
 			}));
 			this._codeEditorListeners.add(this._codeEditor.onDidScrollChange(() => {
 				// visibleRanges
-				this._updatePropertiesNow(null);
+				if (!isValidCodeEditor()) {
+					return;
+				}
+				updateProperties(null);
 			}));
 			this._updatePropertiesNow(null);
 		}
@@ -297,7 +352,7 @@ export class MainThreadTextEditor {
 	}
 
 	private _setIndentConfiguration(newConfiguration: ITextEditorConfigurationUpdate): void {
-		const creationOpts = this._modelService.getCreationOptions(this._model.getLanguageIdentifier().language, this._model.uri, this._model.isForSimpleWidget);
+		const creationOpts = this._modelService.getCreationOptions(this._model.getLanguageId(), this._model.uri, this._model.isForSimpleWidget);
 
 		if (newConfiguration.tabSize === 'auto' || newConfiguration.insertSpaces === 'auto') {
 			// one of the options was set to 'auto' => detect indentation
@@ -324,11 +379,7 @@ export class MainThreadTextEditor {
 			newOpts.tabSize = newConfiguration.tabSize;
 		}
 		if (typeof newConfiguration.indentSize !== 'undefined') {
-			if (newConfiguration.indentSize === 'tabSize') {
-				newOpts.indentSize = newOpts.tabSize || creationOpts.tabSize;
-			} else {
-				newOpts.indentSize = newConfiguration.indentSize;
-			}
+			newOpts.indentSize = newConfiguration.indentSize;
 		}
 		this._model.updateOptions(newOpts);
 	}
@@ -365,11 +416,11 @@ export class MainThreadTextEditor {
 		}
 	}
 
-	public setDecorations(key: string, ranges: editorCommon.IDecorationOptions[]): void {
+	public setDecorations(key: string, ranges: IDecorationOptions[]): void {
 		if (!this._codeEditor) {
 			return;
 		}
-		this._codeEditor.setDecorations(key, ranges);
+		this._codeEditor.setDecorationsByType('exthost-api', key, ranges);
 	}
 
 	public setDecorationsFast(key: string, _ranges: number[]): void {
@@ -380,7 +431,7 @@ export class MainThreadTextEditor {
 		for (let i = 0, len = Math.floor(_ranges.length / 4); i < len; i++) {
 			ranges[i] = new Range(_ranges[4 * i], _ranges[4 * i + 1], _ranges[4 * i + 2], _ranges[4 * i + 3]);
 		}
-		this._codeEditor.setDecorationsFast(key, ranges);
+		this._codeEditor.setDecorationsByTypeFast(key, ranges);
 	}
 
 	public revealRange(range: IRange, revealType: TextEditorRevealType): void {
@@ -389,16 +440,16 @@ export class MainThreadTextEditor {
 		}
 		switch (revealType) {
 			case TextEditorRevealType.Default:
-				this._codeEditor.revealRange(range, editorCommon.ScrollType.Smooth);
+				this._codeEditor.revealRange(range, ScrollType.Smooth);
 				break;
 			case TextEditorRevealType.InCenter:
-				this._codeEditor.revealRangeInCenter(range, editorCommon.ScrollType.Smooth);
+				this._codeEditor.revealRangeInCenter(range, ScrollType.Smooth);
 				break;
 			case TextEditorRevealType.InCenterIfOutsideViewport:
-				this._codeEditor.revealRangeInCenterIfOutsideViewport(range, editorCommon.ScrollType.Smooth);
+				this._codeEditor.revealRangeInCenterIfOutsideViewport(range, ScrollType.Smooth);
 				break;
 			case TextEditorRevealType.AtTop:
-				this._codeEditor.revealRangeAtTop(range, editorCommon.ScrollType.Smooth);
+				this._codeEditor.revealRangeAtTop(range, ScrollType.Smooth);
 				break;
 			default:
 				console.warn(`Unknown revealType: ${revealType}`);
@@ -413,7 +464,7 @@ export class MainThreadTextEditor {
 		return false;
 	}
 
-	public matches(editor: IEditor): boolean {
+	public matches(editor: IEditorPane): boolean {
 		if (!editor) {
 			return false;
 		}
@@ -436,7 +487,7 @@ export class MainThreadTextEditor {
 			this._model.pushEOL(opts.setEndOfLine);
 		}
 
-		const transformedEdits = edits.map((edit): IIdentifiedSingleEditOperation => {
+		const transformedEdits = edits.map((edit): ISingleEditOperation => {
 			return {
 				range: Range.lift(edit.range),
 				text: edit.text,
@@ -454,15 +505,33 @@ export class MainThreadTextEditor {
 		return true;
 	}
 
-	insertSnippet(template: string, ranges: readonly IRange[], opts: IUndoStopOptions) {
+	async insertSnippet(modelVersionId: number, template: string, ranges: readonly IRange[], opts: IUndoStopOptions) {
 
-		if (!this._codeEditor) {
+		if (!this._codeEditor || !this._codeEditor.hasModel()) {
+			return false;
+		}
+
+		// check if clipboard is required and only iff read it (async)
+		let clipboardText: string | undefined;
+		const needsTemplate = SnippetParser.guessNeedsClipboard(template);
+		if (needsTemplate) {
+			const state = new EditorState(this._codeEditor, CodeEditorStateFlag.Value | CodeEditorStateFlag.Position);
+			clipboardText = await this._clipboardService.readText();
+			if (!state.validate(this._codeEditor)) {
+				return false;
+			}
+		}
+
+		if (this._codeEditor.getModel().getVersionId() !== modelVersionId) {
 			return false;
 		}
 
 		const snippetController = SnippetController2.get(this._codeEditor);
+		if (!snippetController) {
+			return false;
+		}
 
-		// // cancel previous snippet mode
+		// cancel previous snippet mode
 		// snippetController.leaveSnippet();
 
 		// set selection, focus editor
@@ -471,7 +540,11 @@ export class MainThreadTextEditor {
 		this._codeEditor.focus();
 
 		// make modifications
-		snippetController.insert(template, { overwriteBefore: 0, overwriteAfter: 0, undoStopBefore: opts.undoStopBefore, undoStopAfter: opts.undoStopAfter });
+		snippetController.insert(template, {
+			overwriteBefore: 0, overwriteAfter: 0,
+			undoStopBefore: opts.undoStopBefore, undoStopAfter: opts.undoStopAfter,
+			clipboardText
+		});
 
 		return true;
 	}

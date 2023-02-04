@@ -47,14 +47,7 @@ export class GitFileSystemProvider implements FileSystemProvider {
 		this.disposables.push(
 			model.onDidChangeRepository(this.onDidChangeRepository, this),
 			model.onDidChangeOriginalResource(this.onDidChangeOriginalResource, this),
-			workspace.registerFileSystemProvider('gitfs', this, { isReadonly: true, isCaseSensitive: true }),
-			workspace.registerResourceLabelFormatter({
-				scheme: 'gitfs',
-				formatting: {
-					label: '${path} (git)',
-					separator: '/'
-				}
-			})
+			workspace.registerFileSystemProvider('git', this, { isReadonly: true, isCaseSensitive: true }),
 		);
 
 		setInterval(() => this.cleanup(), FIVE_MINUTES);
@@ -133,6 +126,8 @@ export class GitFileSystemProvider implements FileSystemProvider {
 	}
 
 	async stat(uri: Uri): Promise<FileStat> {
+		await this.model.isInitialized;
+
 		const { submoduleOf, path, ref } = fromGitUri(uri);
 		const repository = submoduleOf ? this.model.getRepository(submoduleOf) : this.model.getRepository(uri);
 		if (!repository) {
@@ -158,6 +153,8 @@ export class GitFileSystemProvider implements FileSystemProvider {
 	}
 
 	async readFile(uri: Uri): Promise<Uint8Array> {
+		await this.model.isInitialized;
+
 		const { path, ref, submoduleOf } = fromGitUri(uri);
 
 		if (submoduleOf) {

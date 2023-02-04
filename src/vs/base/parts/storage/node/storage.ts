@@ -3,26 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Database, Statement } from 'vscode-sqlite3';
-import { Event } from 'vs/base/common/event';
 import { timeout } from 'vs/base/common/async';
+import { Event } from 'vs/base/common/event';
 import { mapToString, setToString } from 'vs/base/common/map';
 import { basename } from 'vs/base/common/path';
-import { copy, renameIgnoreError, unlink } from 'vs/base/node/pfs';
-import { fill } from 'vs/base/common/arrays';
+import { Promises } from 'vs/base/node/pfs';
 import { IStorageDatabase, IStorageItemsChangeEvent, IUpdateRequest } from 'vs/base/parts/storage/common/storage';
+import type { Database, Statement } from '@vscode/sqlite3';
 
 interface IDatabaseConnection {
-	db: Database;
-
-	isInMemory: boolean;
+	readonly db: Database;
+	readonly isInMemory: boolean;
 
 	isErroneous?: boolean;
 	lastError?: string;
 }
 
 export interface ISQLiteStorageDatabaseOptions {
-	logging?: ISQLiteStorageDatabaseLoggingOptions;
+	readonly logging?: ISQLiteStorageDatabaseLoggingOptions;
 }
 
 export interface ISQLiteStorageDatabaseLoggingOptions {
@@ -39,21 +37,13 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 	private static readonly BUSY_OPEN_TIMEOUT = 2000; // timeout in ms to retry when opening DB fails with SQLITE_BUSY
 	private static readonly MAX_HOST_PARAMETERS = 256; // maximum number of parameters within a statement
 
-	private path: string;
-	private name: string;
+	private readonly name = basename(this.path);
 
-	private logger: SQLiteStorageDatabaseLogger;
+	private readonly logger = new SQLiteStorageDatabaseLogger(this.options.logging);
 
-	private whenConnected: Promise<IDatabaseConnection>;
+	private readonly whenConnected = this.connect(this.path);
 
-	constructor(path: string, options: ISQLiteStorageDatabaseOptions = Object.create(null)) {
-		this.path = path;
-		this.name = basename(path);
-
-		this.logger = new SQLiteStorageDatabaseLogger(options.logging);
-
-		this.whenConnected = this.connect(path);
-	}
+	constructor(private readonly path: string, private readonly options: ISQLiteStorageDatabaseOptions = Object.create(null)) { }
 
 	async getItems(): Promise<Map<string, string>> {
 		const connection = await this.whenConnected;
@@ -106,7 +96,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 				});
 
 				keysValuesChunks.forEach(keysValuesChunk => {
-					this.prepare(connection, `INSERT INTO ItemTable VALUES ${fill(keysValuesChunk.length / 2, '(?,?)').join(',')}`, stmt => stmt.run(keysValuesChunk), () => {
+					this.prepare(connection, `INSERT INTO ItemTable VALUES ${new Array(keysValuesChunk.length / 2).fill('(?,?)').join(',')}`, stmt => stmt.run(keysValuesChunk), () => {
 						const keys: string[] = [];
 						let length = 0;
 						toInsert.forEach((value, key) => {
@@ -141,7 +131,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 				});
 
 				keysChunks.forEach(keysChunk => {
-					this.prepare(connection, `DELETE FROM ItemTable WHERE key IN (${fill(keysChunk.length, '?').join(',')})`, stmt => stmt.run(keysChunk), () => {
+					this.prepare(connection, `DELETE FROM ItemTable WHERE key IN (${new Array(keysChunk.length).fill('?').join(',')})`, stmt => stmt.run(keysChunk), () => {
 						const keys: string[] = [];
 						toDelete.forEach(key => {
 							keys.push(key);
@@ -166,7 +156,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		return new Promise((resolve, reject) => {
 			connection.db.close(closeError => {
 				if (closeError) {
-					this.handleSQLiteError(connection, closeError, `[storage ${this.name}] close(): ${closeError}`);
+					this.handleSQLiteError(connection, `[storage ${this.name}] close(): ${closeError}`);
 				}
 
 				// Return early if this storage was created only in-memory
@@ -196,7 +186,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 					// Delete the existing DB. If the path does not exist or fails to
 					// be deleted, we do not try to recover anymore because we assume
 					// that the path is no longer writeable for us.
-					return unlink(this.path).then(() => {
+					return Promises.unlink(this.path).then(() => {
 
 						// Re-open the DB fresh
 						return this.doConnect(this.path).then(recoveryConnection => {
@@ -226,7 +216,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 	private backup(): Promise<void> {
 		const backupPath = this.toBackupPath(this.path);
 
-		return copy(this.path, backupPath);
+		return Promises.copy(this.path, backupPath, { preserveSymlinks: false });
 	}
 
 	private toBackupPath(path: string): string {
@@ -282,8 +272,12 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 			// folder is really not writeable for us.
 			//
 			try {
-				await unlink(path);
-				await renameIgnoreError(this.toBackupPath(path), path);
+				await Promises.unlink(path);
+				try {
+					await Promises.rename(this.toBackupPath(path), path);
+				} catch (error) {
+					// ignore
+				}
 
 				return await this.doConnect(path);
 			} catch (error) {
@@ -296,7 +290,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		}
 	}
 
-	private handleSQLiteError(connection: IDatabaseConnection, error: Error & { code?: string }, msg: string): void {
+	private handleSQLiteError(connection: IDatabaseConnection, msg: string): void {
 		connection.isErroneous = true;
 		connection.lastError = msg;
 
@@ -305,11 +299,11 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 
 	private doConnect(path: string): Promise<IDatabaseConnection> {
 		return new Promise((resolve, reject) => {
-			import('vscode-sqlite3').then(sqlite3 => {
+			import('@vscode/sqlite3').then(sqlite3 => {
 				const connection: IDatabaseConnection = {
-					db: new (this.logger.isTracing ? sqlite3.verbose().Database : sqlite3.Database)(path, error => {
+					db: new (this.logger.isTracing ? sqlite3.verbose().Database : sqlite3.Database)(path, (error: (Error & { code?: string }) | null) => {
 						if (error) {
-							return connection.db ? connection.db.close(() => reject(error)) : reject(error);
+							return (connection.db && error.code !== 'SQLITE_CANTOPEN' /* https://github.com/TryGhost/node-sqlite3/issues/1617 */) ? connection.db.close(() => reject(error)) : reject(error);
 						}
 
 						// The following exec() statement serves two purposes:
@@ -328,7 +322,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 				};
 
 				// Errors
-				connection.db.on('error', error => this.handleSQLiteError(connection, error, `[storage ${this.name}] Error (event): ${error}`));
+				connection.db.on('error', error => this.handleSQLiteError(connection, `[storage ${this.name}] Error (event): ${error}`));
 
 				// Tracing
 				if (this.logger.isTracing) {
@@ -342,7 +336,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		return new Promise((resolve, reject) => {
 			connection.db.exec(sql, error => {
 				if (error) {
-					this.handleSQLiteError(connection, error, `[storage ${this.name}] exec(): ${error}`);
+					this.handleSQLiteError(connection, `[storage ${this.name}] exec(): ${error}`);
 
 					return reject(error);
 				}
@@ -356,7 +350,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		return new Promise((resolve, reject) => {
 			connection.db.get(sql, (error, row) => {
 				if (error) {
-					this.handleSQLiteError(connection, error, `[storage ${this.name}] get(): ${error}`);
+					this.handleSQLiteError(connection, `[storage ${this.name}] get(): ${error}`);
 
 					return reject(error);
 				}
@@ -366,11 +360,11 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		});
 	}
 
-	private all(connection: IDatabaseConnection, sql: string): Promise<{ key: string, value: string }[]> {
+	private all(connection: IDatabaseConnection, sql: string): Promise<{ key: string; value: string }[]> {
 		return new Promise((resolve, reject) => {
 			connection.db.all(sql, (error, rows) => {
 				if (error) {
-					this.handleSQLiteError(connection, error, `[storage ${this.name}] all(): ${error}`);
+					this.handleSQLiteError(connection, `[storage ${this.name}] all(): ${error}`);
 
 					return reject(error);
 				}
@@ -389,7 +383,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 
 				connection.db.run('END TRANSACTION', error => {
 					if (error) {
-						this.handleSQLiteError(connection, error, `[storage ${this.name}] transaction(): ${error}`);
+						this.handleSQLiteError(connection, `[storage ${this.name}] transaction(): ${error}`);
 
 						return reject(error);
 					}
@@ -404,7 +398,7 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 		const stmt = connection.db.prepare(sql);
 
 		const statementErrorListener = (error: Error) => {
-			this.handleSQLiteError(connection, error, `[storage ${this.name}] prepare(): ${error} (${sql}). Details: ${errorDetails()}`);
+			this.handleSQLiteError(connection, `[storage ${this.name}] prepare(): ${error} (${sql}). Details: ${errorDetails()}`);
 		};
 
 		stmt.on('error', statementErrorListener);
@@ -422,11 +416,17 @@ export class SQLiteStorageDatabase implements IStorageDatabase {
 }
 
 class SQLiteStorageDatabaseLogger {
+
+	// to reduce lots of output, require an environment variable to enable tracing
+	// this helps when running with --verbose normally where the storage tracing
+	// might hide useful output to look at
+	static readonly VSCODE_TRACE_STORAGE = 'VSCODE_TRACE_STORAGE';
+
 	private readonly logTrace: ((msg: string) => void) | undefined;
 	private readonly logError: ((error: string | Error) => void) | undefined;
 
 	constructor(options?: ISQLiteStorageDatabaseLoggingOptions) {
-		if (options && typeof options.logTrace === 'function') {
+		if (options && typeof options.logTrace === 'function' && process.env[SQLiteStorageDatabaseLogger.VSCODE_TRACE_STORAGE]) {
 			this.logTrace = options.logTrace;
 		}
 
@@ -440,14 +440,10 @@ class SQLiteStorageDatabaseLogger {
 	}
 
 	trace(msg: string): void {
-		if (this.logTrace) {
-			this.logTrace(msg);
-		}
+		this.logTrace?.(msg);
 	}
 
 	error(error: string | Error): void {
-		if (this.logError) {
-			this.logError(error);
-		}
+		this.logError?.(error);
 	}
 }

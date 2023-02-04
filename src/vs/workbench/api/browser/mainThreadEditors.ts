@@ -3,27 +3,38 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { localize } from 'vs/nls';
 import { disposed } from 'vs/base/common/errors';
 import { IDisposable, dispose, DisposableStore } from 'vs/base/common/lifecycle';
 import { equals as objectEquals } from 'vs/base/common/objects';
 import { URI, UriComponents } from 'vs/base/common/uri';
-import { IBulkEditService } from 'vs/editor/browser/services/bulkEditService';
 import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
 import { IRange } from 'vs/editor/common/core/range';
 import { ISelection } from 'vs/editor/common/core/selection';
-import { IDecorationOptions, IDecorationRenderOptions, ILineChange } from 'vs/editor/common/editorCommon';
-import { ISingleEditOperation } from 'vs/editor/common/model';
+import { IDecorationOptions, IDecorationRenderOptions } from 'vs/editor/common/editorCommon';
+import { ISingleEditOperation } from 'vs/editor/common/core/editOperation';
 import { CommandsRegistry } from 'vs/platform/commands/common/commands';
-import { IEditorOptions, ITextEditorOptions, IResourceInput, EditorActivation } from 'vs/platform/editor/common/editor';
+import { ITextEditorOptions, IResourceEditorInput, EditorActivation, EditorResolution } from 'vs/platform/editor/common/editor';
 import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
-import { IOpenerService } from 'vs/platform/opener/common/opener';
-import { MainThreadDocumentsAndEditors } from 'vs/workbench/api/browser/mainThreadDocumentsAndEditors';
 import { MainThreadTextEditor } from 'vs/workbench/api/browser/mainThreadEditor';
-import { ExtHostContext, ExtHostEditorsShape, IApplyEditsOptions, IExtHostContext, ITextDocumentShowOptions, ITextEditorConfigurationUpdate, ITextEditorPositionData, IUndoStopOptions, MainThreadTextEditorsShape, TextEditorRevealType, IWorkspaceEditDto, reviveWorkspaceEditDto } from 'vs/workbench/api/common/extHost.protocol';
-import { EditorViewColumn, editorGroupToViewColumn, viewColumnToEditorGroup } from 'vs/workbench/api/common/shared/editor';
+import { ExtHostContext, ExtHostEditorsShape, IApplyEditsOptions, ITextDocumentShowOptions, ITextEditorConfigurationUpdate, ITextEditorPositionData, IUndoStopOptions, MainThreadTextEditorsShape, TextEditorRevealType } from 'vs/workbench/api/common/extHost.protocol';
+import { editorGroupToColumn, columnToEditorGroup, EditorGroupColumn } from 'vs/workbench/services/editor/common/editorGroupColumn';
 import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
+import { IEnvironmentService } from 'vs/platform/environment/common/environment';
+import { IWorkingCopyService } from 'vs/workbench/services/workingCopy/common/workingCopyService';
+import { ExtensionIdentifier } from 'vs/platform/extensions/common/extensions';
+import { IChange } from 'vs/editor/common/diff/smartLinesDiffComputer';
+import { IExtHostContext } from 'vs/workbench/services/extensions/common/extHostCustomers';
+import { IEditorControl } from 'vs/workbench/common/editor';
+import { getCodeEditor, ICodeEditor } from 'vs/editor/browser/editorBrowser';
+import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
+import { DirtyDiffContribution } from 'vs/workbench/contrib/scm/browser/dirtydiffDecorator';
+
+export interface IMainThreadEditorLocator {
+	getEditor(id: string): MainThreadTextEditor | undefined;
+	findTextEditorIdFor(editorControl: IEditorControl): string | undefined;
+	getIdOfCodeEditor(codeEditor: ICodeEditor): string | undefined;
+}
 
 export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
@@ -31,29 +42,24 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 	private readonly _instanceId: string;
 	private readonly _proxy: ExtHostEditorsShape;
-	private readonly _documentsAndEditors: MainThreadDocumentsAndEditors;
 	private readonly _toDispose = new DisposableStore();
-	private _textEditorsListenersMap: { [editorId: string]: IDisposable[]; };
+	private _textEditorsListenersMap: { [editorId: string]: IDisposable[] };
 	private _editorPositionData: ITextEditorPositionData | null;
-	private _registeredDecorationTypes: { [decorationType: string]: boolean; };
+	private _registeredDecorationTypes: { [decorationType: string]: boolean };
 
 	constructor(
-		documentsAndEditors: MainThreadDocumentsAndEditors,
+		private readonly _editorLocator: IMainThreadEditorLocator,
 		extHostContext: IExtHostContext,
 		@ICodeEditorService private readonly _codeEditorService: ICodeEditorService,
-		@IBulkEditService private readonly _bulkEditService: IBulkEditService,
 		@IEditorService private readonly _editorService: IEditorService,
-		@IEditorGroupsService private readonly _editorGroupService: IEditorGroupsService
+		@IEditorGroupsService private readonly _editorGroupService: IEditorGroupsService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService
 	) {
 		this._instanceId = String(++MainThreadTextEditors.INSTANCE_COUNT);
 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostEditors);
-		this._documentsAndEditors = documentsAndEditors;
 
 		this._textEditorsListenersMap = Object.create(null);
 		this._editorPositionData = null;
-
-		this._toDispose.add(documentsAndEditors.onTextEditorAdd(editors => editors.forEach(this._onTextEditorAdd, this)));
-		this._toDispose.add(documentsAndEditors.onTextEditorRemove(editors => editors.forEach(this._onTextEditorRemove, this)));
 
 		this._toDispose.add(this._editorService.onDidVisibleEditorsChange(() => this._updateActiveAndVisibleTextEditors()));
 		this._toDispose.add(this._editorGroupService.onDidRemoveGroup(() => this._updateActiveAndVisibleTextEditors()));
@@ -62,19 +68,19 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		this._registeredDecorationTypes = Object.create(null);
 	}
 
-	public dispose(): void {
+	dispose(): void {
 		Object.keys(this._textEditorsListenersMap).forEach((editorId) => {
 			dispose(this._textEditorsListenersMap[editorId]);
 		});
 		this._textEditorsListenersMap = Object.create(null);
 		this._toDispose.dispose();
-		for (let decorationType in this._registeredDecorationTypes) {
+		for (const decorationType in this._registeredDecorationTypes) {
 			this._codeEditorService.removeDecorationType(decorationType);
 		}
 		this._registeredDecorationTypes = Object.create(null);
 	}
 
-	private _onTextEditorAdd(textEditor: MainThreadTextEditor): void {
+	handleTextEditorAdded(textEditor: MainThreadTextEditor): void {
 		const id = textEditor.getId();
 		const toDispose: IDisposable[] = [];
 		toDispose.push(textEditor.onPropertiesChanged((data) => {
@@ -84,7 +90,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		this._textEditorsListenersMap[id] = toDispose;
 	}
 
-	private _onTextEditorRemove(id: string): void {
+	handleTextEditorRemoved(id: string): void {
 		dispose(this._textEditorsListenersMap[id]);
 		delete this._textEditorsListenersMap[id];
 	}
@@ -101,10 +107,10 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 	private _getTextEditorPositionData(): ITextEditorPositionData {
 		const result: ITextEditorPositionData = Object.create(null);
-		for (let workbenchEditor of this._editorService.visibleControls) {
-			const id = this._documentsAndEditors.findTextEditorIdFor(workbenchEditor);
+		for (const editorPane of this._editorService.visibleEditorPanes) {
+			const id = this._editorLocator.findTextEditorIdFor(editorPane);
 			if (id) {
-				result[id] = editorGroupToViewColumn(this._editorGroupService, workbenchEditor.group);
+				result[id] = editorGroupToColumn(this._editorGroupService, editorPane.group);
 			}
 		}
 		return result;
@@ -121,47 +127,52 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 			selection: options.selection,
 			// preserve pre 1.38 behaviour to not make group active when preserveFocus: true
 			// but make sure to restore the editor to fix https://github.com/microsoft/vscode/issues/79633
-			activation: options.preserveFocus ? EditorActivation.RESTORE : undefined
+			activation: options.preserveFocus ? EditorActivation.RESTORE : undefined,
+			override: EditorResolution.EXCLUSIVE_ONLY
 		};
 
-		const input: IResourceInput = {
+		const input: IResourceEditorInput = {
 			resource: uri,
 			options: editorOptions
 		};
 
-		const editor = await this._editorService.openEditor(input, viewColumnToEditorGroup(this._editorGroupService, options.position));
+		const editor = await this._editorService.openEditor(input, columnToEditorGroup(this._editorGroupService, this._configurationService, options.position));
 		if (!editor) {
 			return undefined;
 		}
-		return this._documentsAndEditors.findTextEditorIdFor(editor);
+		// Composite editors are made up of many editors so we return the active one at the time of opening
+		const editorControl = editor.getControl();
+		const codeEditor = getCodeEditor(editorControl);
+		return codeEditor ? this._editorLocator.getIdOfCodeEditor(codeEditor) : undefined;
 	}
 
-	async $tryShowEditor(id: string, position?: EditorViewColumn): Promise<void> {
-		const mainThreadEditor = this._documentsAndEditors.getEditor(id);
+	async $tryShowEditor(id: string, position?: EditorGroupColumn): Promise<void> {
+		const mainThreadEditor = this._editorLocator.getEditor(id);
 		if (mainThreadEditor) {
 			const model = mainThreadEditor.getModel();
 			await this._editorService.openEditor({
 				resource: model.uri,
 				options: { preserveFocus: false }
-			}, viewColumnToEditorGroup(this._editorGroupService, position));
+			}, columnToEditorGroup(this._editorGroupService, this._configurationService, position));
 			return;
 		}
 	}
 
 	async $tryHideEditor(id: string): Promise<void> {
-		const mainThreadEditor = this._documentsAndEditors.getEditor(id);
+		const mainThreadEditor = this._editorLocator.getEditor(id);
 		if (mainThreadEditor) {
-			const editors = this._editorService.visibleControls;
-			for (let editor of editors) {
-				if (mainThreadEditor.matches(editor)) {
-					return editor.group.closeEditor(editor.input);
+			const editorPanes = this._editorService.visibleEditorPanes;
+			for (const editorPane of editorPanes) {
+				if (mainThreadEditor.matches(editorPane)) {
+					await editorPane.group.closeEditor(editorPane.input);
+					return;
 				}
 			}
 		}
 	}
 
 	$trySetSelections(id: string, selections: ISelection[]): Promise<void> {
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
@@ -171,7 +182,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 	$trySetDecorations(id: string, key: string, ranges: IDecorationOptions[]): Promise<void> {
 		key = `${this._instanceId}-${key}`;
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
@@ -181,7 +192,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 	$trySetDecorationsFast(id: string, key: string, ranges: number[]): Promise<void> {
 		key = `${this._instanceId}-${key}`;
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
@@ -190,7 +201,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 	}
 
 	$tryRevealRange(id: string, range: IRange, revealType: TextEditorRevealType): Promise<void> {
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
@@ -199,7 +210,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 	}
 
 	$trySetOptions(id: string, options: ITextEditorConfigurationUpdate): Promise<void> {
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
@@ -208,30 +219,25 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 	}
 
 	$tryApplyEdits(id: string, modelVersionId: number, edits: ISingleEditOperation[], opts: IApplyEditsOptions): Promise<boolean> {
-		const editor = this._documentsAndEditors.getEditor(id);
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
 		return Promise.resolve(editor.applyEdits(modelVersionId, edits, opts));
 	}
 
-	$tryApplyWorkspaceEdit(dto: IWorkspaceEditDto): Promise<boolean> {
-		const { edits } = reviveWorkspaceEditDto(dto);
-		return this._bulkEditService.apply({ edits }).then(() => true, _err => false);
-	}
-
-	$tryInsertSnippet(id: string, template: string, ranges: readonly IRange[], opts: IUndoStopOptions): Promise<boolean> {
-		const editor = this._documentsAndEditors.getEditor(id);
+	$tryInsertSnippet(id: string, modelVersionId: number, template: string, ranges: readonly IRange[], opts: IUndoStopOptions): Promise<boolean> {
+		const editor = this._editorLocator.getEditor(id);
 		if (!editor) {
 			return Promise.reject(disposed(`TextEditor(${id})`));
 		}
-		return Promise.resolve(editor.insertSnippet(template, ranges, opts));
+		return Promise.resolve(editor.insertSnippet(modelVersionId, template, ranges, opts));
 	}
 
-	$registerTextEditorDecorationType(key: string, options: IDecorationRenderOptions): void {
+	$registerTextEditorDecorationType(extensionId: ExtensionIdentifier, key: string, options: IDecorationRenderOptions): void {
 		key = `${this._instanceId}-${key}`;
 		this._registeredDecorationTypes[key] = true;
-		this._codeEditorService.registerDecorationType(key, options);
+		this._codeEditorService.registerDecorationType(`exthost-api-${extensionId}`, key, options);
 	}
 
 	$removeTextEditorDecorationType(key: string): void {
@@ -240,8 +246,8 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		this._codeEditorService.removeDecorationType(key);
 	}
 
-	$getDiffInformation(id: string): Promise<ILineChange[]> {
-		const editor = this._documentsAndEditors.getEditor(id);
+	$getDiffInformation(id: string): Promise<IChange[]> {
+		const editor = this._editorLocator.getEditor(id);
 
 		if (!editor) {
 			return Promise.reject(new Error('No such TextEditor'));
@@ -263,7 +269,7 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 		const dirtyDiffContribution = codeEditor.getContribution('editor.contrib.dirtydiff');
 
 		if (dirtyDiffContribution) {
-			return Promise.resolve((dirtyDiffContribution as any).getChanges());
+			return Promise.resolve((dirtyDiffContribution as DirtyDiffContribution).getChanges());
 		}
 
 		return Promise.resolve([]);
@@ -272,43 +278,14 @@ export class MainThreadTextEditors implements MainThreadTextEditorsShape {
 
 // --- commands
 
-CommandsRegistry.registerCommand('_workbench.open', function (accessor: ServicesAccessor, args: [URI, IEditorOptions, EditorViewColumn, string?]) {
-	const editorService = accessor.get(IEditorService);
-	const editorGroupService = accessor.get(IEditorGroupsService);
-	const openerService = accessor.get(IOpenerService);
-
-	const [resource, options, position, label] = args;
-
-	if (options || typeof position === 'number') {
-		// use editor options or editor view column as a hint to use the editor service for opening
-		return editorService.openEditor({ resource, options, label }, viewColumnToEditorGroup(editorGroupService, position)).then(_ => undefined);
+CommandsRegistry.registerCommand('_workbench.revertAllDirty', async function (accessor: ServicesAccessor) {
+	const environmentService = accessor.get(IEnvironmentService);
+	if (!environmentService.extensionTestsLocationURI) {
+		throw new Error('Command is only available when running extension tests.');
 	}
 
-	if (resource && resource.scheme === 'command') {
-		// do not allow to execute commands from here
-		return Promise.resolve(undefined);
-
+	const workingCopyService = accessor.get(IWorkingCopyService);
+	for (const workingCopy of workingCopyService.dirtyWorkingCopies) {
+		await workingCopy.revert({ soft: true });
 	}
-	// finally, delegate to opener service
-	return openerService.open(resource).then(_ => undefined);
-});
-
-
-CommandsRegistry.registerCommand('_workbench.diff', function (accessor: ServicesAccessor, args: [URI, URI, string, string, IEditorOptions, EditorViewColumn]) {
-	const editorService = accessor.get(IEditorService);
-	const editorGroupService = accessor.get(IEditorGroupsService);
-
-	let [leftResource, rightResource, label, description, options, position] = args;
-
-	if (!options || typeof options !== 'object') {
-		options = {
-			preserveFocus: false
-		};
-	}
-
-	if (!label) {
-		label = localize('diffLeftRightLabel', "{0} ⟷ {1}", leftResource.toString(true), rightResource.toString(true));
-	}
-
-	return editorService.openEditor({ leftResource, rightResource, label, description, options }, viewColumnToEditorGroup(editorGroupService, position)).then(() => undefined);
 });

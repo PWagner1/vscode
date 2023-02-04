@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ActiveJsTsEditorTracker } from './activeJsTsEditorTracker';
 import { Disposable } from './dispose';
+import { disabledSchemes } from './fileSchemes';
 import { isJsConfigOrTsConfigFileName } from './languageDescription';
-import { isSupportedLanguageMode } from './languageModeIds';
+import { isSupportedLanguageMode } from './languageIds';
 
-/**
+/**E
  * When clause context set when the current file is managed by vscode's built-in typescript extension.
  */
 export default class ManagedFileContextManager extends Disposable {
@@ -16,18 +18,18 @@ export default class ManagedFileContextManager extends Disposable {
 
 	private isInManagedFileContext: boolean = false;
 
-	public constructor(
-		private readonly normalizePath: (resource: vscode.Uri) => string | undefined
-	) {
+	public constructor(activeJsTsEditorTracker: ActiveJsTsEditorTracker) {
 		super();
-		vscode.window.onDidChangeActiveTextEditor(this.onDidChangeActiveTextEditor, this, this._disposables);
+		activeJsTsEditorTracker.onDidChangeActiveJsTsEditor(this.onDidChangeActiveTextEditor, this, this._disposables);
 
-		this.onDidChangeActiveTextEditor(vscode.window.activeTextEditor);
+		this.onDidChangeActiveTextEditor(activeJsTsEditorTracker.activeJsTsEditor);
 	}
 
-	private onDidChangeActiveTextEditor(editor?: vscode.TextEditor): any {
+	private onDidChangeActiveTextEditor(editor?: vscode.TextEditor): void {
 		if (editor) {
 			this.updateContext(this.isManagedFile(editor));
+		} else {
+			this.updateContext(false);
 		}
 	}
 
@@ -45,10 +47,11 @@ export default class ManagedFileContextManager extends Disposable {
 	}
 
 	private isManagedScriptFile(editor: vscode.TextEditor): boolean {
-		return isSupportedLanguageMode(editor.document) && this.normalizePath(editor.document.uri) !== null;
+		return isSupportedLanguageMode(editor.document) && !disabledSchemes.has(editor.document.uri.scheme);
 	}
 
 	private isManagedConfigFile(editor: vscode.TextEditor): boolean {
 		return isJsConfigOrTsConfigFileName(editor.document.fileName);
 	}
 }
+

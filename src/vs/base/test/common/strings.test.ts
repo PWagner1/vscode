@@ -52,7 +52,7 @@ suite('Strings', () => {
 
 			let expected = strings.compare(a.toLowerCase(), b.toLowerCase());
 			expected = expected > 0 ? 1 : expected < 0 ? -1 : expected;
-			assert.equal(actual, expected, `${a} <> ${b}`);
+			assert.strictEqual(actual, expected, `${a} <> ${b}`);
 
 			if (recurse) {
 				assertCompareIgnoreCase(b, a, false);
@@ -81,6 +81,27 @@ suite('Strings', () => {
 		assertCompareIgnoreCase('O', '/');
 	});
 
+	test('compareIgnoreCase (substring)', () => {
+
+		function assertCompareIgnoreCase(a: string, b: string, aStart: number, aEnd: number, bStart: number, bEnd: number, recurse = true): void {
+			let actual = strings.compareSubstringIgnoreCase(a, b, aStart, aEnd, bStart, bEnd);
+			actual = actual > 0 ? 1 : actual < 0 ? -1 : actual;
+
+			let expected = strings.compare(a.toLowerCase().substring(aStart, aEnd), b.toLowerCase().substring(bStart, bEnd));
+			expected = expected > 0 ? 1 : expected < 0 ? -1 : expected;
+			assert.strictEqual(actual, expected, `${a} <> ${b}`);
+
+			if (recurse) {
+				assertCompareIgnoreCase(b, a, bStart, bEnd, aStart, aEnd, false);
+			}
+		}
+
+		assertCompareIgnoreCase('', '', 0, 0, 0, 0);
+		assertCompareIgnoreCase('abc', 'ABC', 0, 1, 0, 1);
+		assertCompareIgnoreCase('abc', 'Aabc', 0, 3, 1, 4);
+		assertCompareIgnoreCase('abcABc', 'ABcd', 3, 6, 0, 4);
+	});
+
 	test('format', () => {
 		assert.strictEqual(strings.format('Foo Bar'), 'Foo Bar');
 		assert.strictEqual(strings.format('Foo {0} Bar'), 'Foo {0} Bar');
@@ -92,15 +113,17 @@ suite('Strings', () => {
 		assert.strictEqual(strings.format('Foo {0} Bar. {1}', '(foo)', '.test'), 'Foo (foo) Bar. .test');
 	});
 
-	test('overlap', () => {
-		assert.equal(strings.overlap('foobar', 'arr, I am a priate'), 2);
-		assert.equal(strings.overlap('no', 'overlap'), 1);
-		assert.equal(strings.overlap('no', '0verlap'), 0);
-		assert.equal(strings.overlap('nothing', ''), 0);
-		assert.equal(strings.overlap('', 'nothing'), 0);
-		assert.equal(strings.overlap('full', 'full'), 4);
-		assert.equal(strings.overlap('full', 'fulloverlap'), 4);
+	test('format2', () => {
+		assert.strictEqual(strings.format2('Foo Bar', {}), 'Foo Bar');
+		assert.strictEqual(strings.format2('Foo {oops} Bar', {}), 'Foo {oops} Bar');
+		assert.strictEqual(strings.format2('Foo {foo} Bar', { foo: 'bar' }), 'Foo bar Bar');
+		assert.strictEqual(strings.format2('Foo {foo} Bar {foo}', { foo: 'bar' }), 'Foo bar Bar bar');
+		assert.strictEqual(strings.format2('Foo {foo} Bar {bar}{boo}', { foo: 'bar' }), 'Foo bar Bar {bar}{boo}');
+		assert.strictEqual(strings.format2('Foo {foo} Bar {bar}{boo}', { foo: 'bar', bar: 'undefined' }), 'Foo bar Bar undefined{boo}');
+		assert.strictEqual(strings.format2('Foo {foo} Bar {bar}{boo}', { foo: 'bar', bar: '5', boo: false }), 'Foo bar Bar 5false');
+		assert.strictEqual(strings.format2('Foo {foo} Bar. {bar}', { foo: '(foo)', bar: '.test' }), 'Foo (foo) Bar. .test');
 	});
+
 	test('lcut', () => {
 		assert.strictEqual(strings.lcut('foo bar', 0), '');
 		assert.strictEqual(strings.lcut('foo bar', 1), 'bar');
@@ -113,41 +136,12 @@ suite('Strings', () => {
 		assert.strictEqual(strings.lcut('a', 10), 'a');
 	});
 
-	test('pad', () => {
-		assert.strictEqual(strings.pad(1, 0), '1');
-		assert.strictEqual(strings.pad(1, 1), '1');
-		assert.strictEqual(strings.pad(1, 2), '01');
-		assert.strictEqual(strings.pad(0, 2), '00');
-	});
-
 	test('escape', () => {
 		assert.strictEqual(strings.escape(''), '');
 		assert.strictEqual(strings.escape('foo'), 'foo');
 		assert.strictEqual(strings.escape('foo bar'), 'foo bar');
 		assert.strictEqual(strings.escape('<foo bar>'), '&lt;foo bar&gt;');
 		assert.strictEqual(strings.escape('<foo>Hello</foo>'), '&lt;foo&gt;Hello&lt;/foo&gt;');
-	});
-
-	test('startsWith', () => {
-		assert(strings.startsWith('foo', 'f'));
-		assert(strings.startsWith('foo', 'fo'));
-		assert(strings.startsWith('foo', 'foo'));
-		assert(!strings.startsWith('foo', 'o'));
-		assert(!strings.startsWith('', 'f'));
-		assert(strings.startsWith('foo', ''));
-		assert(strings.startsWith('', ''));
-	});
-
-	test('endsWith', () => {
-		assert(strings.endsWith('foo', 'o'));
-		assert(strings.endsWith('foo', 'oo'));
-		assert(strings.endsWith('foo', 'foo'));
-		assert(strings.endsWith('foo bar foo', 'foo'));
-		assert(!strings.endsWith('foo', 'f'));
-		assert(!strings.endsWith('', 'f'));
-		assert(strings.endsWith('foo', ''));
-		assert(strings.endsWith('', ''));
-		assert(strings.endsWith('/', '/'));
 	});
 
 	test('ltrim', () => {
@@ -193,13 +187,6 @@ suite('Strings', () => {
 		assert.strictEqual(' 	  '.trim(), '');
 	});
 
-	test('repeat', () => {
-		assert.strictEqual(strings.repeat(' ', 4), '    ');
-		assert.strictEqual(strings.repeat(' ', 1), ' ');
-		assert.strictEqual(strings.repeat(' ', 0), '');
-		assert.strictEqual(strings.repeat('abc', 2), 'abcabc');
-	});
-
 	test('lastNonWhitespaceIndex', () => {
 		assert.strictEqual(strings.lastNonWhitespaceIndex('abc  \t \t '), 2);
 		assert.strictEqual(strings.lastNonWhitespaceIndex('abc'), 2);
@@ -212,36 +199,23 @@ suite('Strings', () => {
 	});
 
 	test('containsRTL', () => {
-		assert.equal(strings.containsRTL('a'), false);
-		assert.equal(strings.containsRTL(''), false);
-		assert.equal(strings.containsRTL(strings.UTF8_BOM_CHARACTER + 'a'), false);
-		assert.equal(strings.containsRTL('hello world!'), false);
-		assert.equal(strings.containsRTL('a📚📚b'), false);
-		assert.equal(strings.containsRTL('هناك حقيقة مثبتة منذ زمن طويل'), true);
-		assert.equal(strings.containsRTL('זוהי עובדה מבוססת שדעתו'), true);
+		assert.strictEqual(strings.containsRTL('a'), false);
+		assert.strictEqual(strings.containsRTL(''), false);
+		assert.strictEqual(strings.containsRTL(strings.UTF8_BOM_CHARACTER + 'a'), false);
+		assert.strictEqual(strings.containsRTL('hello world!'), false);
+		assert.strictEqual(strings.containsRTL('a📚📚b'), false);
+		assert.strictEqual(strings.containsRTL('هناك حقيقة مثبتة منذ زمن طويل'), true);
+		assert.strictEqual(strings.containsRTL('זוהי עובדה מבוססת שדעתו'), true);
 	});
 
-	test('containsEmoji', () => {
-		assert.equal(strings.containsEmoji('a'), false);
-		assert.equal(strings.containsEmoji(''), false);
-		assert.equal(strings.containsEmoji(strings.UTF8_BOM_CHARACTER + 'a'), false);
-		assert.equal(strings.containsEmoji('hello world!'), false);
-		assert.equal(strings.containsEmoji('هناك حقيقة مثبتة منذ زمن طويل'), false);
-		assert.equal(strings.containsEmoji('זוהי עובדה מבוססת שדעתו'), false);
-
-		assert.equal(strings.containsEmoji('a📚📚b'), true);
-		assert.equal(strings.containsEmoji('1F600 # 😀 grinning face'), true);
-		assert.equal(strings.containsEmoji('1F47E # 👾 alien monster'), true);
-		assert.equal(strings.containsEmoji('1F467 1F3FD # 👧🏽 girl: medium skin tone'), true);
-		assert.equal(strings.containsEmoji('26EA # ⛪ church'), true);
-		assert.equal(strings.containsEmoji('231B # ⌛ hourglass'), true);
-		assert.equal(strings.containsEmoji('2702 # ✂ scissors'), true);
-		assert.equal(strings.containsEmoji('1F1F7 1F1F4  # 🇷🇴 Romania'), true);
+	test('issue #115221: isEmojiImprecise misses ⭐', () => {
+		const codePoint = strings.getNextCodePoint('⭐', '⭐'.length, 0);
+		assert.strictEqual(strings.isEmojiImprecise(codePoint), true);
 	});
 
 	test('isBasicASCII', () => {
 		function assertIsBasicASCII(str: string, expected: boolean): void {
-			assert.equal(strings.isBasicASCII(str), expected, str + ` (${str.charCodeAt(0)})`);
+			assert.strictEqual(strings.isBasicASCII(str), expected, str + ` (${str.charCodeAt(0)})`);
 		}
 		assertIsBasicASCII('abcdefghijklmnopqrstuvwxyz', true);
 		assertIsBasicASCII('ABCDEFGHIJKLMNOPQRSTUVWXYZ', true);
@@ -269,16 +243,16 @@ suite('Strings', () => {
 		assert.throws(() => strings.createRegExp('', false));
 
 		// Escapes appropriately
-		assert.equal(strings.createRegExp('abc', false).source, 'abc');
-		assert.equal(strings.createRegExp('([^ ,.]*)', false).source, '\\(\\[\\^ ,\\.\\]\\*\\)');
-		assert.equal(strings.createRegExp('([^ ,.]*)', true).source, '([^ ,.]*)');
+		assert.strictEqual(strings.createRegExp('abc', false).source, 'abc');
+		assert.strictEqual(strings.createRegExp('([^ ,.]*)', false).source, '\\(\\[\\^ ,\\.\\]\\*\\)');
+		assert.strictEqual(strings.createRegExp('([^ ,.]*)', true).source, '([^ ,.]*)');
 
 		// Whole word
-		assert.equal(strings.createRegExp('abc', false, { wholeWord: true }).source, '\\babc\\b');
-		assert.equal(strings.createRegExp('abc', true, { wholeWord: true }).source, '\\babc\\b');
-		assert.equal(strings.createRegExp(' abc', true, { wholeWord: true }).source, ' abc\\b');
-		assert.equal(strings.createRegExp('abc ', true, { wholeWord: true }).source, '\\babc ');
-		assert.equal(strings.createRegExp(' abc ', true, { wholeWord: true }).source, ' abc ');
+		assert.strictEqual(strings.createRegExp('abc', false, { wholeWord: true }).source, '\\babc\\b');
+		assert.strictEqual(strings.createRegExp('abc', true, { wholeWord: true }).source, '\\babc\\b');
+		assert.strictEqual(strings.createRegExp(' abc', true, { wholeWord: true }).source, ' abc\\b');
+		assert.strictEqual(strings.createRegExp('abc ', true, { wholeWord: true }).source, '\\babc ');
+		assert.strictEqual(strings.createRegExp(' abc ', true, { wholeWord: true }).source, ' abc ');
 
 		const regExpWithoutFlags = strings.createRegExp('abc', true);
 		assert(!regExpWithoutFlags.global);
@@ -308,15 +282,15 @@ suite('Strings', () => {
 	});
 
 	test('getLeadingWhitespace', () => {
-		assert.equal(strings.getLeadingWhitespace('  foo'), '  ');
-		assert.equal(strings.getLeadingWhitespace('  foo', 2), '');
-		assert.equal(strings.getLeadingWhitespace('  foo', 1, 1), '');
-		assert.equal(strings.getLeadingWhitespace('  foo', 0, 1), ' ');
-		assert.equal(strings.getLeadingWhitespace('  '), '  ');
-		assert.equal(strings.getLeadingWhitespace('  ', 1), ' ');
-		assert.equal(strings.getLeadingWhitespace('  ', 0, 1), ' ');
-		assert.equal(strings.getLeadingWhitespace('\t\tfunction foo(){', 0, 1), '\t');
-		assert.equal(strings.getLeadingWhitespace('\t\tfunction foo(){', 0, 2), '\t\t');
+		assert.strictEqual(strings.getLeadingWhitespace('  foo'), '  ');
+		assert.strictEqual(strings.getLeadingWhitespace('  foo', 2), '');
+		assert.strictEqual(strings.getLeadingWhitespace('  foo', 1, 1), '');
+		assert.strictEqual(strings.getLeadingWhitespace('  foo', 0, 1), ' ');
+		assert.strictEqual(strings.getLeadingWhitespace('  '), '  ');
+		assert.strictEqual(strings.getLeadingWhitespace('  ', 1), ' ');
+		assert.strictEqual(strings.getLeadingWhitespace('  ', 0, 1), ' ');
+		assert.strictEqual(strings.getLeadingWhitespace('\t\tfunction foo(){', 0, 1), '\t');
+		assert.strictEqual(strings.getLeadingWhitespace('\t\tfunction foo(){', 0, 2), '\t\t');
 	});
 
 	test('fuzzyContains', () => {
@@ -340,11 +314,11 @@ suite('Strings', () => {
 	});
 
 	test('stripUTF8BOM', () => {
-		assert.equal(strings.stripUTF8BOM(strings.UTF8_BOM_CHARACTER), '');
-		assert.equal(strings.stripUTF8BOM(strings.UTF8_BOM_CHARACTER + 'foobar'), 'foobar');
-		assert.equal(strings.stripUTF8BOM('foobar' + strings.UTF8_BOM_CHARACTER), 'foobar' + strings.UTF8_BOM_CHARACTER);
-		assert.equal(strings.stripUTF8BOM('abc'), 'abc');
-		assert.equal(strings.stripUTF8BOM(''), '');
+		assert.strictEqual(strings.stripUTF8BOM(strings.UTF8_BOM_CHARACTER), '');
+		assert.strictEqual(strings.stripUTF8BOM(strings.UTF8_BOM_CHARACTER + 'foobar'), 'foobar');
+		assert.strictEqual(strings.stripUTF8BOM('foobar' + strings.UTF8_BOM_CHARACTER), 'foobar' + strings.UTF8_BOM_CHARACTER);
+		assert.strictEqual(strings.stripUTF8BOM('abc'), 'abc');
+		assert.strictEqual(strings.stripUTF8BOM(''), '');
 	});
 
 	test('containsUppercaseCharacter', () => {
@@ -364,7 +338,7 @@ suite('Strings', () => {
 			['FöÖ', true],
 			['\\Foo', true],
 		].forEach(([str, result]) => {
-			assert.equal(strings.containsUppercaseCharacter(<string>str), result, `Wrong result for ${str}`);
+			assert.strictEqual(strings.containsUppercaseCharacter(<string>str), result, `Wrong result for ${str}`);
 		});
 	});
 
@@ -376,7 +350,7 @@ suite('Strings', () => {
 
 			['Foo', true],
 		].forEach(([str, result]) => {
-			assert.equal(strings.containsUppercaseCharacter(<string>str, true), result, `Wrong result for ${str}`);
+			assert.strictEqual(strings.containsUppercaseCharacter(<string>str, true), result, `Wrong result for ${str}`);
 		});
 	});
 
@@ -388,112 +362,159 @@ suite('Strings', () => {
 			['123', '123'],
 			['.a', '.a'],
 		].forEach(([inStr, result]) => {
-			assert.equal(strings.uppercaseFirstLetter(inStr), result, `Wrong result for ${inStr}`);
+			assert.strictEqual(strings.uppercaseFirstLetter(inStr), result, `Wrong result for ${inStr}`);
 		});
 	});
 
 	test('getNLines', () => {
-		assert.equal(strings.getNLines('', 5), '');
-		assert.equal(strings.getNLines('foo', 5), 'foo');
-		assert.equal(strings.getNLines('foo\nbar', 5), 'foo\nbar');
-		assert.equal(strings.getNLines('foo\nbar', 2), 'foo\nbar');
+		assert.strictEqual(strings.getNLines('', 5), '');
+		assert.strictEqual(strings.getNLines('foo', 5), 'foo');
+		assert.strictEqual(strings.getNLines('foo\nbar', 5), 'foo\nbar');
+		assert.strictEqual(strings.getNLines('foo\nbar', 2), 'foo\nbar');
 
-		assert.equal(strings.getNLines('foo\nbar', 1), 'foo');
-		assert.equal(strings.getNLines('foo\nbar'), 'foo');
-		assert.equal(strings.getNLines('foo\nbar\nsomething', 2), 'foo\nbar');
-		assert.equal(strings.getNLines('foo', 0), '');
-	});
-
-	test('removeAccents', function () {
-		assert.equal(strings.removeAccents('joào'), 'joao');
-		assert.equal(strings.removeAccents('joáo'), 'joao');
-		assert.equal(strings.removeAccents('joâo'), 'joao');
-		assert.equal(strings.removeAccents('joäo'), 'joao');
-		// assert.equal(strings.removeAccents('joæo'), 'joao'); // not an accent
-		assert.equal(strings.removeAccents('joão'), 'joao');
-		assert.equal(strings.removeAccents('joåo'), 'joao');
-		assert.equal(strings.removeAccents('joåo'), 'joao');
-		assert.equal(strings.removeAccents('joāo'), 'joao');
-
-		assert.equal(strings.removeAccents('fôo'), 'foo');
-		assert.equal(strings.removeAccents('föo'), 'foo');
-		assert.equal(strings.removeAccents('fòo'), 'foo');
-		assert.equal(strings.removeAccents('fóo'), 'foo');
-		// assert.equal(strings.removeAccents('fœo'), 'foo');
-		// assert.equal(strings.removeAccents('føo'), 'foo');
-		assert.equal(strings.removeAccents('fōo'), 'foo');
-		assert.equal(strings.removeAccents('fõo'), 'foo');
-
-		assert.equal(strings.removeAccents('andrè'), 'andre');
-		assert.equal(strings.removeAccents('andré'), 'andre');
-		assert.equal(strings.removeAccents('andrê'), 'andre');
-		assert.equal(strings.removeAccents('andrë'), 'andre');
-		assert.equal(strings.removeAccents('andrē'), 'andre');
-		assert.equal(strings.removeAccents('andrė'), 'andre');
-		assert.equal(strings.removeAccents('andrę'), 'andre');
-
-		assert.equal(strings.removeAccents('hvîc'), 'hvic');
-		assert.equal(strings.removeAccents('hvïc'), 'hvic');
-		assert.equal(strings.removeAccents('hvíc'), 'hvic');
-		assert.equal(strings.removeAccents('hvīc'), 'hvic');
-		assert.equal(strings.removeAccents('hvįc'), 'hvic');
-		assert.equal(strings.removeAccents('hvìc'), 'hvic');
-
-		assert.equal(strings.removeAccents('ûdo'), 'udo');
-		assert.equal(strings.removeAccents('üdo'), 'udo');
-		assert.equal(strings.removeAccents('ùdo'), 'udo');
-		assert.equal(strings.removeAccents('údo'), 'udo');
-		assert.equal(strings.removeAccents('ūdo'), 'udo');
-
-		assert.equal(strings.removeAccents('heÿ'), 'hey');
-
-		// assert.equal(strings.removeAccents('gruß'), 'grus');
-		assert.equal(strings.removeAccents('gruś'), 'grus');
-		assert.equal(strings.removeAccents('gruš'), 'grus');
-
-		assert.equal(strings.removeAccents('çool'), 'cool');
-		assert.equal(strings.removeAccents('ćool'), 'cool');
-		assert.equal(strings.removeAccents('čool'), 'cool');
-
-		assert.equal(strings.removeAccents('ñice'), 'nice');
-		assert.equal(strings.removeAccents('ńice'), 'nice');
-	});
-
-	test('encodeUTF8', function () {
-		function assertEncodeUTF8(str: string, expected: number[]): void {
-			const actual = strings.encodeUTF8(str);
-			const actualArr: number[] = [];
-			for (let offset = 0; offset < actual.byteLength; offset++) {
-				actualArr[offset] = actual[offset];
-			}
-			assert.deepEqual(actualArr, expected);
-		}
-
-		function assertDecodeUTF8(data: number[], expected: string): void {
-			const actual = strings.decodeUTF8(new Uint8Array(data));
-			assert.deepEqual(actual, expected);
-		}
-
-		function assertEncodeDecodeUTF8(str: string, buff: number[]): void {
-			assertEncodeUTF8(str, buff);
-			assertDecodeUTF8(buff, str);
-		}
-
-		assertEncodeDecodeUTF8('\u0000', [0]);
-		assertEncodeDecodeUTF8('!', [33]);
-		assertEncodeDecodeUTF8('\u007F', [127]);
-		assertEncodeDecodeUTF8('\u0080', [194, 128]);
-		assertEncodeDecodeUTF8('Ɲ', [198, 157]);
-		assertEncodeDecodeUTF8('\u07FF', [223, 191]);
-		assertEncodeDecodeUTF8('\u0800', [224, 160, 128]);
-		assertEncodeDecodeUTF8('ஂ', [224, 174, 130]);
-		assertEncodeDecodeUTF8('\uffff', [239, 191, 191]);
-		assertEncodeDecodeUTF8('\u10000', [225, 128, 128, 48]);
-		assertEncodeDecodeUTF8('🧝', [240, 159, 167, 157]);
-
+		assert.strictEqual(strings.getNLines('foo\nbar', 1), 'foo');
+		assert.strictEqual(strings.getNLines('foo\nbar'), 'foo');
+		assert.strictEqual(strings.getNLines('foo\nbar\nsomething', 2), 'foo\nbar');
+		assert.strictEqual(strings.getNLines('foo', 0), '');
 	});
 
 	test('getGraphemeBreakType', () => {
-		assert.equal(strings.getGraphemeBreakType(0xBC1), strings.GraphemeBreakType.SpacingMark);
+		assert.strictEqual(strings.getGraphemeBreakType(0xBC1), strings.GraphemeBreakType.SpacingMark);
+	});
+
+	test('truncate', () => {
+		assert.strictEqual('hello world', strings.truncate('hello world', 100));
+		assert.strictEqual('hello…', strings.truncate('hello world', 5));
+	});
+
+	test('replaceAsync', async () => {
+		let i = 0;
+		assert.strictEqual(await strings.replaceAsync('abcabcabcabc', /b(.)/g, async (match, after) => {
+			assert.strictEqual(match, 'bc');
+			assert.strictEqual(after, 'c');
+			return `${i++}${after}`;
+		}), 'a0ca1ca2ca3c');
+	});
+
+	test('removeAnsiEscapeCodes', () => {
+		const CSI = '\x1b\[';
+		const sequences = [
+			// Base cases from https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Functions-using-CSI-_-ordered-by-the-final-character_s_
+			`${CSI}42@`,
+			`${CSI}42 @`,
+			`${CSI}42A`,
+			`${CSI}42 A`,
+			`${CSI}42B`,
+			`${CSI}42C`,
+			`${CSI}42D`,
+			`${CSI}42E`,
+			`${CSI}42F`,
+			`${CSI}42G`,
+			`${CSI}42;42H`,
+			`${CSI}42I`,
+			`${CSI}42J`,
+			`${CSI}?42J`,
+			`${CSI}42K`,
+			`${CSI}?42K`,
+			`${CSI}42L`,
+			`${CSI}42M`,
+			`${CSI}42P`,
+			`${CSI}#P`,
+			`${CSI}3#P`,
+			`${CSI}#Q`,
+			`${CSI}3#Q`,
+			`${CSI}#R`,
+			`${CSI}42S`,
+			`${CSI}?1;2;3S`,
+			`${CSI}42T`,
+			`${CSI}42;42;42;42;42T`,
+			`${CSI}>3T`,
+			`${CSI}42X`,
+			`${CSI}42Z`,
+			`${CSI}42^`,
+			`${CSI}42\``,
+			`${CSI}42a`,
+			`${CSI}42b`,
+			`${CSI}42c`,
+			`${CSI}=42c`,
+			`${CSI}>42c`,
+			`${CSI}42d`,
+			`${CSI}42e`,
+			`${CSI}42;42f`,
+			`${CSI}42g`,
+			`${CSI}3h`,
+			`${CSI}?3h`,
+			`${CSI}42i`,
+			`${CSI}?42i`,
+			`${CSI}3l`,
+			`${CSI}?3l`,
+			`${CSI}3m`,
+			`${CSI}>0;0m`,
+			`${CSI}>0m`,
+			`${CSI}?0m`,
+			`${CSI}42n`,
+			`${CSI}>42n`,
+			`${CSI}?42n`,
+			`${CSI}>42p`,
+			`${CSI}!p`,
+			`${CSI}0;0"p`,
+			`${CSI}42$p`,
+			`${CSI}?42$p`,
+			`${CSI}#p`,
+			`${CSI}3#p`,
+			`${CSI}>42q`,
+			`${CSI}42q`,
+			`${CSI}42 q`,
+			`${CSI}42"q`,
+			`${CSI}#q`,
+			`${CSI}42;42r`,
+			`${CSI}?3r`,
+			`${CSI}0;0;0;0;3$r`,
+			`${CSI}s`,
+			`${CSI}0;0s`,
+			`${CSI}>42s`,
+			`${CSI}?3s`,
+			`${CSI}42;42;42t`,
+			`${CSI}>3t`,
+			`${CSI}42 t`,
+			`${CSI}0;0;0;0;3$t`,
+			`${CSI}u`,
+			`${CSI}42 u`,
+			`${CSI}0;0;0;0;0;0;0;0$v`,
+			`${CSI}42$w`,
+			`${CSI}0;0;0;0'w`,
+			`${CSI}42x`,
+			`${CSI}42*x`,
+			`${CSI}0;0;0;0;0$x`,
+			`${CSI}42#y`,
+			`${CSI}0;0;0;0;0;0*y`,
+			`${CSI}42;0'z`,
+			`${CSI}0;1;2;4$z`,
+			`${CSI}3'{`,
+			`${CSI}#{`,
+			`${CSI}3#{`,
+			`${CSI}0;0;0;0\${`,
+			`${CSI}0;0;0;0#|`,
+			`${CSI}42$|`,
+			`${CSI}42'|`,
+			`${CSI}42*|`,
+			`${CSI}#}`,
+			`${CSI}42'}`,
+			`${CSI}42$}`,
+			`${CSI}42'~`,
+			`${CSI}42$~`,
+
+			// Common SGR cases:
+			`${CSI}1;31m`, // multiple attrs
+			`${CSI}105m`, // bright background
+			`${CSI}48:5:128m`, // 256 indexed color
+			`${CSI}48;5;128m`, // 256 indexed color alt
+			`${CSI}38:2:0:255:255:255m`, // truecolor
+			`${CSI}38;2;255;255;255m`, // truecolor alt
+		];
+
+		for (const sequence of sequences) {
+			assert.strictEqual(strings.removeAnsiEscapeCodes(`hello${sequence}world`), 'helloworld', `expect to remove ${JSON.stringify(sequence)}`);
+		}
 	});
 });

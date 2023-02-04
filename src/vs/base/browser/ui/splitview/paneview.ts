@@ -3,41 +3,47 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import 'vs/css!./paneview';
-import { IDisposable, Disposable, DisposableStore } from 'vs/base/common/lifecycle';
-import { Event, Emitter } from 'vs/base/common/event';
-import { domEvent } from 'vs/base/browser/event';
-import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
-import { KeyCode } from 'vs/base/common/keyCodes';
-import { $, append, addClass, removeClass, toggleClass, trackFocus, EventHelper } from 'vs/base/browser/dom';
-import { firstIndex } from 'vs/base/common/arrays';
-import { Color, RGBA } from 'vs/base/common/color';
-import { SplitView, IView } from './splitview';
 import { isFirefox } from 'vs/base/browser/browser';
 import { DataTransfers } from 'vs/base/browser/dnd';
+import { $, addDisposableListener, append, clearNode, EventHelper, EventType, trackFocus } from 'vs/base/browser/dom';
+import { DomEmitter } from 'vs/base/browser/event';
+import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
+import { Gesture, EventType as TouchEventType } from 'vs/base/browser/touch';
+import { IBoundarySashes, Orientation } from 'vs/base/browser/ui/sash/sash';
+import { Color, RGBA } from 'vs/base/common/color';
+import { Emitter, Event } from 'vs/base/common/event';
+import { KeyCode } from 'vs/base/common/keyCodes';
+import { Disposable, DisposableStore, IDisposable } from 'vs/base/common/lifecycle';
+import { ScrollEvent } from 'vs/base/common/scrollable';
+import 'vs/css!./paneview';
+import { localize } from 'vs/nls';
+import { IView, Sizing, SplitView } from './splitview';
 
 export interface IPaneOptions {
-	ariaHeaderLabel?: string;
 	minimumBodySize?: number;
 	maximumBodySize?: number;
 	expanded?: boolean;
+	orientation?: Orientation;
+	title: string;
+	titleDescription?: string;
 }
 
 export interface IPaneStyles {
-	dropBackground?: Color;
-	headerForeground?: Color;
-	headerBackground?: Color;
-	headerBorder?: Color;
+	readonly dropBackground: string | undefined;
+	readonly headerForeground: string | undefined;
+	readonly headerBackground: string | undefined;
+	readonly headerBorder: string | undefined;
+	readonly leftBorder: string | undefined;
 }
 
 /**
  * A Pane is a structured SplitView view.
  *
- * WARNING: You must call `render()` after you contruct it.
+ * WARNING: You must call `render()` after you construct it.
  * It can't be done automatically at the end of the ctor
  * because of the order of property initialization in TypeScript.
  * Subclasses wouldn't be able to set own properties
- * before the `render()` call, thus forbiding their use.
+ * before the `render()` call, thus forbidding their use.
  */
 export abstract class Pane extends Disposable implements IView {
 
@@ -48,13 +54,21 @@ export abstract class Pane extends Disposable implements IView {
 	private body!: HTMLElement;
 
 	protected _expanded: boolean;
+	protected _orientation: Orientation;
 
 	private expandedSize: number | undefined = undefined;
 	private _headerVisible = true;
+	private _bodyRendered = false;
 	private _minimumBodySize: number;
 	private _maximumBodySize: number;
-	private ariaHeaderLabel: string;
-	private styles: IPaneStyles = {};
+	private _ariaHeaderLabel: string;
+	private styles: IPaneStyles = {
+		dropBackground: undefined,
+		headerBackground: undefined,
+		headerBorder: undefined,
+		headerForeground: undefined,
+		leftBorder: undefined
+	};
 	private animationTimer: number | undefined = undefined;
 
 	private readonly _onDidChange = this._register(new Emitter<number | undefined>());
@@ -62,6 +76,15 @@ export abstract class Pane extends Disposable implements IView {
 
 	private readonly _onDidChangeExpansionState = this._register(new Emitter<boolean>());
 	readonly onDidChangeExpansionState: Event<boolean> = this._onDidChangeExpansionState.event;
+
+	get ariaHeaderLabel(): string {
+		return this._ariaHeaderLabel;
+	}
+
+	set ariaHeaderLabel(newLabel: string) {
+		this._ariaHeaderLabel = newLabel;
+		this.header.setAttribute('aria-label', this.ariaHeaderLabel);
+	}
 
 	get draggableElement(): HTMLElement {
 		return this.header;
@@ -71,9 +94,8 @@ export abstract class Pane extends Disposable implements IView {
 		return this.element;
 	}
 
-	private _dropBackground: Color | undefined;
-	get dropBackground(): Color | undefined {
-		return this._dropBackground;
+	get dropBackground(): string | undefined {
+		return this.styles.dropBackground;
 	}
 
 	get minimumBodySize(): number {
@@ -101,7 +123,7 @@ export abstract class Pane extends Disposable implements IView {
 	get minimumSize(): number {
 		const headerSize = this.headerSize;
 		const expanded = !this.headerVisible || this.isExpanded();
-		const minimumBodySize = expanded ? this._minimumBodySize : 0;
+		const minimumBodySize = expanded ? this.minimumBodySize : 0;
 
 		return headerSize + minimumBodySize;
 	}
@@ -109,18 +131,19 @@ export abstract class Pane extends Disposable implements IView {
 	get maximumSize(): number {
 		const headerSize = this.headerSize;
 		const expanded = !this.headerVisible || this.isExpanded();
-		const maximumBodySize = expanded ? this._maximumBodySize : 0;
+		const maximumBodySize = expanded ? this.maximumBodySize : 0;
 
 		return headerSize + maximumBodySize;
 	}
 
-	width: number = 0;
+	orthogonalSize: number = 0;
 
-	constructor(options: IPaneOptions = {}) {
+	constructor(options: IPaneOptions) {
 		super();
 		this._expanded = typeof options.expanded === 'undefined' ? true : !!options.expanded;
-		this.ariaHeaderLabel = options.ariaHeaderLabel || '';
-		this._minimumBodySize = typeof options.minimumBodySize === 'number' ? options.minimumBodySize : 120;
+		this._orientation = typeof options.orientation === 'undefined' ? Orientation.VERTICAL : options.orientation;
+		this._ariaHeaderLabel = localize('viewSection', "{0} Section", options.title);
+		this._minimumBodySize = typeof options.minimumBodySize === 'number' ? options.minimumBodySize : this._orientation === Orientation.HORIZONTAL ? 200 : 120;
 		this._maximumBodySize = typeof options.maximumBodySize === 'number' ? options.maximumBodySize : Number.POSITIVE_INFINITY;
 
 		this.element = $('.pane');
@@ -135,10 +158,17 @@ export abstract class Pane extends Disposable implements IView {
 			return false;
 		}
 
+		this.element?.classList.toggle('expanded', expanded);
+
 		this._expanded = !!expanded;
 		this.updateHeader();
 
 		if (expanded) {
+			if (!this._bodyRendered) {
+				this.renderBody(this.body);
+				this._bodyRendered = true;
+			}
+
 			if (typeof this.animationTimer === 'number') {
 				clearTimeout(this.animationTimer);
 			}
@@ -168,46 +198,91 @@ export abstract class Pane extends Disposable implements IView {
 		this._onDidChange.fire(undefined);
 	}
 
+	get orientation(): Orientation {
+		return this._orientation;
+	}
+
+	set orientation(orientation: Orientation) {
+		if (this._orientation === orientation) {
+			return;
+		}
+
+		this._orientation = orientation;
+
+		if (this.element) {
+			this.element.classList.toggle('horizontal', this.orientation === Orientation.HORIZONTAL);
+			this.element.classList.toggle('vertical', this.orientation === Orientation.VERTICAL);
+		}
+
+		if (this.header) {
+			this.updateHeader();
+		}
+	}
+
 	render(): void {
+		this.element.classList.toggle('expanded', this.isExpanded());
+		this.element.classList.toggle('horizontal', this.orientation === Orientation.HORIZONTAL);
+		this.element.classList.toggle('vertical', this.orientation === Orientation.VERTICAL);
+
 		this.header = $('.pane-header');
 		append(this.element, this.header);
 		this.header.setAttribute('tabindex', '0');
-		this.header.setAttribute('role', 'toolbar');
+		// Use role button so the aria-expanded state gets read https://github.com/microsoft/vscode/issues/95996
+		this.header.setAttribute('role', 'button');
 		this.header.setAttribute('aria-label', this.ariaHeaderLabel);
 		this.renderHeader(this.header);
 
 		const focusTracker = trackFocus(this.header);
 		this._register(focusTracker);
-		this._register(focusTracker.onDidFocus(() => addClass(this.header, 'focused'), null));
-		this._register(focusTracker.onDidBlur(() => removeClass(this.header, 'focused'), null));
+		this._register(focusTracker.onDidFocus(() => this.header.classList.add('focused'), null));
+		this._register(focusTracker.onDidBlur(() => this.header.classList.remove('focused'), null));
 
 		this.updateHeader();
 
-		const onHeaderKeyDown = Event.chain(domEvent(this.header, 'keydown'))
-			.map(e => new StandardKeyboardEvent(e));
+		const eventDisposables = this._register(new DisposableStore());
+		const onKeyDown = this._register(new DomEmitter(this.header, 'keydown'));
+		const onHeaderKeyDown = Event.map(onKeyDown.event, e => new StandardKeyboardEvent(e), eventDisposables);
 
-		this._register(onHeaderKeyDown.filter(e => e.keyCode === KeyCode.Enter || e.keyCode === KeyCode.Space)
-			.event(() => this.setExpanded(!this.isExpanded()), null));
+		this._register(Event.filter(onHeaderKeyDown, e => e.keyCode === KeyCode.Enter || e.keyCode === KeyCode.Space, eventDisposables)(() => this.setExpanded(!this.isExpanded()), null));
 
-		this._register(onHeaderKeyDown.filter(e => e.keyCode === KeyCode.LeftArrow)
-			.event(() => this.setExpanded(false), null));
+		this._register(Event.filter(onHeaderKeyDown, e => e.keyCode === KeyCode.LeftArrow, eventDisposables)(() => this.setExpanded(false), null));
 
-		this._register(onHeaderKeyDown.filter(e => e.keyCode === KeyCode.RightArrow)
-			.event(() => this.setExpanded(true), null));
+		this._register(Event.filter(onHeaderKeyDown, e => e.keyCode === KeyCode.RightArrow, eventDisposables)(() => this.setExpanded(true), null));
 
-		this._register(domEvent(this.header, 'click')
-			(() => this.setExpanded(!this.isExpanded()), null));
+		this._register(Gesture.addTarget(this.header));
+
+		[EventType.CLICK, TouchEventType.Tap].forEach(eventType => {
+			this._register(addDisposableListener(this.header, eventType, e => {
+				if (!e.defaultPrevented) {
+					this.setExpanded(!this.isExpanded());
+				}
+			}));
+		});
 
 		this.body = append(this.element, $('.pane-body'));
-		this.renderBody(this.body);
+
+		// Only render the body if it will be visible
+		// Otherwise, render it when the pane is expanded
+		if (!this._bodyRendered && this.isExpanded()) {
+			this.renderBody(this.body);
+			this._bodyRendered = true;
+		}
+
+		if (!this.isExpanded()) {
+			this.body.remove();
+		}
 	}
 
-	layout(height: number): void {
+	layout(size: number): void {
 		const headerSize = this.headerVisible ? Pane.HEADER_SIZE : 0;
 
+		const width = this._orientation === Orientation.VERTICAL ? this.orthogonalSize : size;
+		const height = this._orientation === Orientation.VERTICAL ? size - headerSize : this.orthogonalSize - headerSize;
+
 		if (this.isExpanded()) {
-			this.layoutBody(height - headerSize, this.width);
-			this.expandedSize = height;
+			this.body.classList.toggle('wide', width >= 600);
+			this.layoutBody(height, width);
+			this.expandedSize = size;
 		}
 	}
 
@@ -224,16 +299,15 @@ export abstract class Pane extends Disposable implements IView {
 	protected updateHeader(): void {
 		const expanded = !this.headerVisible || this.isExpanded();
 
-		this.header.style.height = `${this.headerSize}px`;
 		this.header.style.lineHeight = `${this.headerSize}px`;
-		toggleClass(this.header, 'hidden', !this.headerVisible);
-		toggleClass(this.header, 'expanded', expanded);
+		this.header.classList.toggle('hidden', !this.headerVisible);
+		this.header.classList.toggle('expanded', expanded);
 		this.header.setAttribute('aria-expanded', String(expanded));
 
-		this.header.style.color = this.styles.headerForeground ? this.styles.headerForeground.toString() : '';
-		this.header.style.backgroundColor = this.styles.headerBackground ? this.styles.headerBackground.toString() : '';
-		this.header.style.borderTop = this.styles.headerBorder ? `1px solid ${this.styles.headerBorder}` : '';
-		this._dropBackground = this.styles.dropBackground;
+		this.header.style.color = this.styles.headerForeground ?? '';
+		this.header.style.backgroundColor = this.styles.headerBackground ?? '';
+		this.header.style.borderTop = this.styles.headerBorder && this.orientation === Orientation.VERTICAL ? `1px solid ${this.styles.headerBorder}` : '';
+		this.element.style.borderLeft = this.styles.leftBorder && this.orientation === Orientation.HORIZONTAL ? `1px solid ${this.styles.leftBorder}` : '';
 	}
 
 	protected abstract renderHeader(container: HTMLElement): void;
@@ -249,20 +323,20 @@ class PaneDraggable extends Disposable {
 
 	private static readonly DefaultDragOverBackgroundColor = new Color(new RGBA(128, 128, 128, 0.5));
 
-	private dragOverCounter = 0; // see https://github.com/Microsoft/vscode/issues/14470
+	private dragOverCounter = 0; // see https://github.com/microsoft/vscode/issues/14470
 
-	private _onDidDrop = this._register(new Emitter<{ from: Pane, to: Pane }>());
+	private _onDidDrop = this._register(new Emitter<{ from: Pane; to: Pane }>());
 	readonly onDidDrop = this._onDidDrop.event;
 
 	constructor(private pane: Pane, private dnd: IPaneDndController, private context: IDndContext) {
 		super();
 
 		pane.draggableElement.draggable = true;
-		this._register(domEvent(pane.draggableElement, 'dragstart')(this.onDragStart, this));
-		this._register(domEvent(pane.dropTargetElement, 'dragenter')(this.onDragEnter, this));
-		this._register(domEvent(pane.dropTargetElement, 'dragleave')(this.onDragLeave, this));
-		this._register(domEvent(pane.dropTargetElement, 'dragend')(this.onDragEnd, this));
-		this._register(domEvent(pane.dropTargetElement, 'drop')(this.onDrop, this));
+		this._register(addDisposableListener(pane.draggableElement, 'dragstart', e => this.onDragStart(e)));
+		this._register(addDisposableListener(pane.dropTargetElement, 'dragenter', e => this.onDragEnter(e)));
+		this._register(addDisposableListener(pane.dropTargetElement, 'dragleave', e => this.onDragLeave(e)));
+		this._register(addDisposableListener(pane.dropTargetElement, 'dragend', e => this.onDragEnd(e)));
+		this._register(addDisposableListener(pane.dropTargetElement, 'drop', e => this.onDrop(e)));
 	}
 
 	private onDragStart(e: DragEvent): void {
@@ -346,7 +420,7 @@ class PaneDraggable extends Disposable {
 		let backgroundColor: string | null = null;
 
 		if (this.dragOverCounter > 0) {
-			backgroundColor = (this.pane.dropBackground || PaneDraggable.DefaultDragOverBackgroundColor).toString();
+			backgroundColor = this.pane.dropBackground ?? PaneDraggable.DefaultDragOverBackgroundColor.toString();
 		}
 
 		this.pane.dropTargetElement.style.backgroundColor = backgroundColor || '';
@@ -371,6 +445,7 @@ export class DefaultPaneDndController implements IPaneDndController {
 
 export interface IPaneViewOptions {
 	dnd?: IPaneDndController;
+	orientation?: Orientation;
 }
 
 interface IPaneItem {
@@ -382,24 +457,39 @@ export class PaneView extends Disposable {
 
 	private dnd: IPaneDndController | undefined;
 	private dndContext: IDndContext = { draggable: null };
-	private el: HTMLElement;
+	readonly element: HTMLElement;
 	private paneItems: IPaneItem[] = [];
-	private width: number = 0;
+	private orthogonalSize: number = 0;
+	private size: number = 0;
 	private splitview: SplitView;
 	private animationTimer: number | undefined = undefined;
 
-	private _onDidDrop = this._register(new Emitter<{ from: Pane, to: Pane }>());
-	readonly onDidDrop: Event<{ from: Pane, to: Pane }> = this._onDidDrop.event;
+	private _onDidDrop = this._register(new Emitter<{ from: Pane; to: Pane }>());
+	readonly onDidDrop: Event<{ from: Pane; to: Pane }> = this._onDidDrop.event;
 
+	orientation: Orientation;
+	private boundarySashes: IBoundarySashes | undefined;
 	readonly onDidSashChange: Event<number>;
+	readonly onDidSashReset: Event<number>;
+	readonly onDidScroll: Event<ScrollEvent>;
 
 	constructor(container: HTMLElement, options: IPaneViewOptions = {}) {
 		super();
 
 		this.dnd = options.dnd;
-		this.el = append(container, $('.monaco-pane-view'));
-		this.splitview = this._register(new SplitView(this.el));
+		this.orientation = options.orientation ?? Orientation.VERTICAL;
+		this.element = append(container, $('.monaco-pane-view'));
+		this.splitview = this._register(new SplitView(this.element, { orientation: this.orientation }));
+		this.onDidSashReset = this.splitview.onDidSashReset;
 		this.onDidSashChange = this.splitview.onDidSashChange;
+		this.onDidScroll = this.splitview.onDidScroll;
+
+		const eventDisposables = this._register(new DisposableStore());
+		const onKeyDown = this._register(new DomEmitter(this.element, 'keydown'));
+		const onHeaderKeyDown = Event.map(Event.filter(onKeyDown.event, e => e.target instanceof HTMLElement && e.target.classList.contains('pane-header'), eventDisposables), e => new StandardKeyboardEvent(e), eventDisposables);
+
+		this._register(Event.filter(onHeaderKeyDown, e => e.keyCode === KeyCode.UpArrow, eventDisposables)(() => this.focusPrevious()));
+		this._register(Event.filter(onHeaderKeyDown, e => e.keyCode === KeyCode.DownArrow, eventDisposables)(() => this.focusNext()));
 	}
 
 	addPane(pane: Pane, size: number, index = this.splitview.length): void {
@@ -408,7 +498,8 @@ export class PaneView extends Disposable {
 
 		const paneItem = { pane: pane, disposable: disposables };
 		this.paneItems.splice(index, 0, paneItem);
-		pane.width = this.width;
+		pane.orientation = this.orientation;
+		pane.orthogonalSize = this.orthogonalSize;
 		this.splitview.addView(pane, size, index);
 
 		if (this.dnd) {
@@ -419,20 +510,20 @@ export class PaneView extends Disposable {
 	}
 
 	removePane(pane: Pane): void {
-		const index = firstIndex(this.paneItems, item => item.pane === pane);
+		const index = this.paneItems.findIndex(item => item.pane === pane);
 
 		if (index === -1) {
 			return;
 		}
 
-		this.splitview.removeView(index);
+		this.splitview.removeView(index, pane.isExpanded() ? Sizing.Distribute : undefined);
 		const paneItem = this.paneItems.splice(index, 1)[0];
 		paneItem.disposable.dispose();
 	}
 
 	movePane(from: Pane, to: Pane): void {
-		const fromIndex = firstIndex(this.paneItems, item => item.pane === from);
-		const toIndex = firstIndex(this.paneItems, item => item.pane === to);
+		const fromIndex = this.paneItems.findIndex(item => item.pane === from);
+		const toIndex = this.paneItems.findIndex(item => item.pane === to);
 
 		if (fromIndex === -1 || toIndex === -1) {
 			return;
@@ -445,7 +536,7 @@ export class PaneView extends Disposable {
 	}
 
 	resizePane(pane: Pane, size: number): void {
-		const index = firstIndex(this.paneItems, item => item.pane === pane);
+		const index = this.paneItems.findIndex(item => item.pane === pane);
 
 		if (index === -1) {
 			return;
@@ -455,7 +546,7 @@ export class PaneView extends Disposable {
 	}
 
 	getPaneSize(pane: Pane): number {
-		const index = firstIndex(this.paneItems, item => item.pane === pane);
+		const index = this.paneItems.findIndex(item => item.pane === pane);
 
 		if (index === -1) {
 			return -1;
@@ -465,13 +556,55 @@ export class PaneView extends Disposable {
 	}
 
 	layout(height: number, width: number): void {
-		this.width = width;
+		this.orthogonalSize = this.orientation === Orientation.VERTICAL ? width : height;
+		this.size = this.orientation === Orientation.HORIZONTAL ? width : height;
 
 		for (const paneItem of this.paneItems) {
-			paneItem.pane.width = width;
+			paneItem.pane.orthogonalSize = this.orthogonalSize;
 		}
 
-		this.splitview.layout(height);
+		this.splitview.layout(this.size);
+	}
+
+	setBoundarySashes(sashes: IBoundarySashes) {
+		this.boundarySashes = sashes;
+		this.updateSplitviewOrthogonalSashes(sashes);
+	}
+
+	private updateSplitviewOrthogonalSashes(sashes: IBoundarySashes | undefined) {
+		if (this.orientation === Orientation.VERTICAL) {
+			this.splitview.orthogonalStartSash = sashes?.left;
+			this.splitview.orthogonalEndSash = sashes?.right;
+		} else {
+			this.splitview.orthogonalEndSash = sashes?.bottom;
+		}
+	}
+
+	flipOrientation(height: number, width: number): void {
+		this.orientation = this.orientation === Orientation.VERTICAL ? Orientation.HORIZONTAL : Orientation.VERTICAL;
+		const paneSizes = this.paneItems.map(pane => this.getPaneSize(pane.pane));
+
+		this.splitview.dispose();
+		clearNode(this.element);
+
+		this.splitview = this._register(new SplitView(this.element, { orientation: this.orientation }));
+		this.updateSplitviewOrthogonalSashes(this.boundarySashes);
+
+		const newOrthogonalSize = this.orientation === Orientation.VERTICAL ? width : height;
+		const newSize = this.orientation === Orientation.HORIZONTAL ? width : height;
+
+		this.paneItems.forEach((pane, index) => {
+			pane.pane.orthogonalSize = newOrthogonalSize;
+			pane.pane.orientation = this.orientation;
+
+			const viewSize = this.size === 0 ? 0 : (newSize * paneSizes[index]) / this.size;
+			this.splitview.addView(pane.pane, viewSize, index);
+		});
+
+		this.size = newSize;
+		this.orthogonalSize = newOrthogonalSize;
+
+		this.splitview.layout(this.size);
 	}
 
 	private setupAnimation(): void {
@@ -479,15 +612,41 @@ export class PaneView extends Disposable {
 			window.clearTimeout(this.animationTimer);
 		}
 
-		addClass(this.el, 'animated');
+		this.element.classList.add('animated');
 
 		this.animationTimer = window.setTimeout(() => {
 			this.animationTimer = undefined;
-			removeClass(this.el, 'animated');
+			this.element.classList.remove('animated');
 		}, 200);
 	}
 
-	dispose(): void {
+	private getPaneHeaderElements(): HTMLElement[] {
+		return [...this.element.querySelectorAll('.pane-header')] as HTMLElement[];
+	}
+
+	private focusPrevious(): void {
+		const headers = this.getPaneHeaderElements();
+		const index = headers.indexOf(document.activeElement as HTMLElement);
+
+		if (index === -1) {
+			return;
+		}
+
+		headers[Math.max(index - 1, 0)].focus();
+	}
+
+	private focusNext(): void {
+		const headers = this.getPaneHeaderElements();
+		const index = headers.indexOf(document.activeElement as HTMLElement);
+
+		if (index === -1) {
+			return;
+		}
+
+		headers[Math.min(index + 1, headers.length - 1)].focus();
+	}
+
+	override dispose(): void {
 		super.dispose();
 
 		this.paneItems.forEach(i => i.disposable.dispose());

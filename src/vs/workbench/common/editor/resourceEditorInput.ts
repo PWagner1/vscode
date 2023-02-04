@@ -3,155 +3,173 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { EditorInput, ITextEditorModel, IModeSupport, GroupIdentifier, isTextEditor } from 'vs/workbench/common/editor';
+import { Verbosity, EditorInputWithPreferredResource, EditorInputCapabilities } from 'vs/workbench/common/editor';
+import { EditorInput } from 'vs/workbench/common/editor/editorInput';
 import { URI } from 'vs/base/common/uri';
-import { IReference } from 'vs/base/common/lifecycle';
-import { ITextModelService } from 'vs/editor/common/services/resolverService';
-import { ResourceEditorModel } from 'vs/workbench/common/editor/resourceEditorModel';
-import { basename } from 'vs/base/common/resources';
-import { ITextFileSaveOptions, ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
-import { IEditorViewState } from 'vs/editor/common/editorCommon';
-import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IFileService, FileSystemProviderCapabilities } from 'vs/platform/files/common/files';
+import { ILabelService } from 'vs/platform/label/common/label';
+import { dirname, isEqual } from 'vs/base/common/resources';
 
 /**
- * A read-only text editor input whos contents are made of the provided resource that points to an existing
- * code editor model.
+ * The base class for all editor inputs that open resources.
  */
-export class ResourceEditorInput extends EditorInput implements IModeSupport {
+export abstract class AbstractResourceEditorInput extends EditorInput implements EditorInputWithPreferredResource {
 
-	static readonly ID: string = 'workbench.editors.resourceEditorInput';
+	override get capabilities(): EditorInputCapabilities {
+		let capabilities = EditorInputCapabilities.CanSplitInGroup;
 
-	private cachedModel: ResourceEditorModel | null = null;
-	private modelReference: Promise<IReference<ITextEditorModel>> | null = null;
+		if (this.fileService.hasProvider(this.resource)) {
+			if (this.fileService.hasCapability(this.resource, FileSystemProviderCapabilities.Readonly)) {
+				capabilities |= EditorInputCapabilities.Readonly;
+			}
+		} else {
+			capabilities |= EditorInputCapabilities.Untitled;
+		}
+
+		if (!(capabilities & EditorInputCapabilities.Readonly)) {
+			capabilities |= EditorInputCapabilities.CanDropIntoEditor;
+		}
+
+		return capabilities;
+	}
+
+	private _preferredResource: URI;
+	get preferredResource(): URI { return this._preferredResource; }
 
 	constructor(
-		private name: string | undefined,
-		private description: string | undefined,
-		private readonly resource: URI,
-		private preferredMode: string | undefined,
-		@ITextModelService private readonly textModelResolverService: ITextModelService,
-		@ITextFileService private readonly textFileService: ITextFileService,
-		@IEditorService private readonly editorService: IEditorService
+		readonly resource: URI,
+		preferredResource: URI | undefined,
+		@ILabelService protected readonly labelService: ILabelService,
+		@IFileService protected readonly fileService: IFileService
 	) {
 		super();
 
-		this.name = name;
-		this.description = description;
-		this.resource = resource;
+		this._preferredResource = preferredResource || resource;
+
+		this.registerListeners();
 	}
 
-	getResource(): URI {
-		return this.resource;
+	private registerListeners(): void {
+
+		// Clear our labels on certain label related events
+		this._register(this.labelService.onDidChangeFormatters(e => this.onLabelEvent(e.scheme)));
+		this._register(this.fileService.onDidChangeFileSystemProviderRegistrations(e => this.onLabelEvent(e.scheme)));
+		this._register(this.fileService.onDidChangeFileSystemProviderCapabilities(e => this.onLabelEvent(e.scheme)));
 	}
 
-	getTypeId(): string {
-		return ResourceEditorInput.ID;
-	}
-
-	getName(): string {
-		return this.name || basename(this.resource);
-	}
-
-	setName(name: string): void {
-		if (this.name !== name) {
-			this.name = name;
-			this._onDidChangeLabel.fire();
+	private onLabelEvent(scheme: string): void {
+		if (scheme === this._preferredResource.scheme) {
+			this.updateLabel();
 		}
 	}
 
-	getDescription(): string | undefined {
-		return this.description;
+	private updateLabel(): void {
+
+		// Clear any cached labels from before
+		this._name = undefined;
+		this._shortDescription = undefined;
+		this._mediumDescription = undefined;
+		this._longDescription = undefined;
+		this._shortTitle = undefined;
+		this._mediumTitle = undefined;
+		this._longTitle = undefined;
+
+		// Trigger recompute of label
+		this._onDidChangeLabel.fire();
 	}
 
-	setDescription(description: string): void {
-		if (this.description !== description) {
-			this.description = description;
-			this._onDidChangeLabel.fire();
+	setPreferredResource(preferredResource: URI): void {
+		if (!isEqual(preferredResource, this._preferredResource)) {
+			this._preferredResource = preferredResource;
+
+			this.updateLabel();
 		}
 	}
 
-	setMode(mode: string): void {
-		this.setPreferredMode(mode);
+	private _name: string | undefined = undefined;
+	override getName(): string {
+		if (typeof this._name !== 'string') {
+			this._name = this.labelService.getUriBasenameLabel(this._preferredResource);
+		}
 
-		if (this.cachedModel) {
-			this.cachedModel.setMode(mode);
+		return this._name;
+	}
+
+	override getDescription(verbosity = Verbosity.MEDIUM): string | undefined {
+		switch (verbosity) {
+			case Verbosity.SHORT:
+				return this.shortDescription;
+			case Verbosity.LONG:
+				return this.longDescription;
+			case Verbosity.MEDIUM:
+			default:
+				return this.mediumDescription;
 		}
 	}
 
-	setPreferredMode(mode: string): void {
-		this.preferredMode = mode;
+	private _shortDescription: string | undefined = undefined;
+	private get shortDescription(): string {
+		if (typeof this._shortDescription !== 'string') {
+			this._shortDescription = this.labelService.getUriBasenameLabel(dirname(this._preferredResource));
+		}
+
+		return this._shortDescription;
 	}
 
-	async resolve(): Promise<ITextEditorModel> {
-		if (!this.modelReference) {
-			this.modelReference = this.textModelResolverService.createModelReference(this.resource);
+	private _mediumDescription: string | undefined = undefined;
+	private get mediumDescription(): string {
+		if (typeof this._mediumDescription !== 'string') {
+			this._mediumDescription = this.labelService.getUriLabel(dirname(this._preferredResource), { relative: true });
 		}
 
-		const ref = await this.modelReference;
-
-		const model = ref.object;
-
-		// Ensure the resolved model is of expected type
-		if (!(model instanceof ResourceEditorModel)) {
-			ref.dispose();
-			this.modelReference = null;
-
-			throw new Error(`Unexpected model for ResourceInput: ${this.resource}`);
-		}
-
-		this.cachedModel = model;
-
-		// Set mode if we have a preferred mode configured
-		if (this.preferredMode) {
-			model.setMode(this.preferredMode);
-		}
-
-		return model;
+		return this._mediumDescription;
 	}
 
-	async saveAs(group: GroupIdentifier, options?: ITextFileSaveOptions): Promise<boolean> {
-
-		// Preserve view state by opening the editor first. In addition
-		// this allows the user to review the contents of the editor.
-		let viewState: IEditorViewState | undefined = undefined;
-		const editor = await this.editorService.openEditor(this, undefined, group);
-		if (isTextEditor(editor)) {
-			viewState = editor.getViewState();
+	private _longDescription: string | undefined = undefined;
+	private get longDescription(): string {
+		if (typeof this._longDescription !== 'string') {
+			this._longDescription = this.labelService.getUriLabel(dirname(this._preferredResource));
 		}
 
-		// Save as
-		const target = await this.textFileService.saveAs(this.resource, undefined, options);
-		if (!target) {
-			return false; // save cancelled
-		}
-
-		// Open the target
-		await this.editorService.openEditor({ resource: target, options: { viewState, pinned: true } }, group);
-
-		return true;
+		return this._longDescription;
 	}
 
-	matches(otherInput: unknown): boolean {
-		if (super.matches(otherInput) === true) {
-			return true;
+	private _shortTitle: string | undefined = undefined;
+	private get shortTitle(): string {
+		if (typeof this._shortTitle !== 'string') {
+			this._shortTitle = this.getName();
 		}
 
-		// Compare by properties
-		if (otherInput instanceof ResourceEditorInput) {
-			return otherInput.resource.toString() === this.resource.toString();
-		}
-
-		return false;
+		return this._shortTitle;
 	}
 
-	dispose(): void {
-		if (this.modelReference) {
-			this.modelReference.then(ref => ref.dispose());
-			this.modelReference = null;
+	private _mediumTitle: string | undefined = undefined;
+	private get mediumTitle(): string {
+		if (typeof this._mediumTitle !== 'string') {
+			this._mediumTitle = this.labelService.getUriLabel(this._preferredResource, { relative: true });
 		}
 
-		this.cachedModel = null;
+		return this._mediumTitle;
+	}
 
-		super.dispose();
+	private _longTitle: string | undefined = undefined;
+	private get longTitle(): string {
+		if (typeof this._longTitle !== 'string') {
+			this._longTitle = this.labelService.getUriLabel(this._preferredResource);
+		}
+
+		return this._longTitle;
+	}
+
+	override getTitle(verbosity?: Verbosity): string {
+		switch (verbosity) {
+			case Verbosity.SHORT:
+				return this.shortTitle;
+			case Verbosity.LONG:
+				return this.longTitle;
+			default:
+			case Verbosity.MEDIUM:
+				return this.mediumTitle;
+		}
 	}
 }

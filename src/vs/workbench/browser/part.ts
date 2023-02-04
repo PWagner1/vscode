@@ -5,23 +5,22 @@
 
 import 'vs/css!./media/part';
 import { Component } from 'vs/workbench/common/component';
-import { IThemeService, ITheme } from 'vs/platform/theme/common/themeService';
-import { Dimension, size } from 'vs/base/browser/dom';
+import { IThemeService, IColorTheme } from 'vs/platform/theme/common/themeService';
+import { Dimension, size, IDimension } from 'vs/base/browser/dom';
 import { IStorageService } from 'vs/platform/storage/common/storage';
-import { IDimension } from 'vs/platform/layout/browser/layoutService';
 import { ISerializableView, IViewSize } from 'vs/base/browser/ui/grid/grid';
 import { Event, Emitter } from 'vs/base/common/event';
 import { IWorkbenchLayoutService } from 'vs/workbench/services/layout/browser/layoutService';
 import { assertIsDefined } from 'vs/base/common/types';
 
 export interface IPartOptions {
-	hasTitle?: boolean;
-	borderWidth?: () => number;
+	readonly hasTitle?: boolean;
+	readonly borderWidth?: () => number;
 }
 
 export interface ILayoutContentResult {
-	titleSize: IDimension;
-	contentSize: IDimension;
+	readonly titleSize: IDimension;
+	readonly contentSize: IDimension;
 }
 
 /**
@@ -34,7 +33,7 @@ export abstract class Part extends Component implements ISerializableView {
 	get dimension(): Dimension | undefined { return this._dimension; }
 
 	protected _onDidVisibilityChange = this._register(new Emitter<boolean>());
-	readonly onDidVisibilityChange: Event<boolean> = this._onDidVisibilityChange.event;
+	readonly onDidVisibilityChange = this._onDidVisibilityChange.event;
 
 	private parent: HTMLElement | undefined;
 	private titleArea: HTMLElement | undefined;
@@ -53,7 +52,7 @@ export abstract class Part extends Component implements ISerializableView {
 		layoutService.registerPart(this);
 	}
 
-	protected onThemeChange(theme: ITheme): void {
+	protected override onThemeChange(theme: IColorTheme): void {
 
 		// only call if our create() method has been called
 		if (this.parent) {
@@ -61,7 +60,7 @@ export abstract class Part extends Component implements ISerializableView {
 		}
 	}
 
-	updateStyles(): void {
+	override updateStyles(): void {
 		super.updateStyles();
 	}
 
@@ -127,7 +126,7 @@ export abstract class Part extends Component implements ISerializableView {
 
 	//#region ISerializableView
 
-	private _onDidChange = this._register(new Emitter<IViewSize | undefined>());
+	protected _onDidChange = this._register(new Emitter<IViewSize | undefined>());
 	get onDidChange(): Event<IViewSize | undefined> { return this._onDidChange.event; }
 
 	element!: HTMLElement;
@@ -137,7 +136,7 @@ export abstract class Part extends Component implements ISerializableView {
 	abstract minimumHeight: number;
 	abstract maximumHeight: number;
 
-	layout(width: number, height: number): void {
+	layout(width: number, height: number, _top: number, _left: number): void {
 		this._dimension = new Dimension(width, height);
 	}
 
@@ -160,10 +159,10 @@ class PartLayout {
 
 		// Title Size: Width (Fill), Height (Variable)
 		let titleSize: Dimension;
-		if (this.options && this.options.hasTitle) {
+		if (this.options.hasTitle) {
 			titleSize = new Dimension(width, Math.min(height, PartLayout.TITLE_HEIGHT));
 		} else {
-			titleSize = new Dimension(0, 0);
+			titleSize = Dimension.None;
 		}
 
 		let contentWidth = width;

@@ -6,7 +6,6 @@
 import * as nls from 'vs/nls';
 import { URI } from 'vs/base/common/uri';
 import * as json from 'vs/base/common/json';
-import * as strings from 'vs/base/common/strings';
 import { setProperty } from 'vs/base/common/jsonEdit';
 import { Queue } from 'vs/base/common/async';
 import { Edit } from 'vs/base/common/jsonFormatter';
@@ -19,7 +18,7 @@ import { IFileService } from 'vs/platform/files/common/files';
 import { ITextModelService, IResolvedTextEditorModel } from 'vs/editor/common/services/resolverService';
 import { IJSONEditingService, IJSONValue, JSONEditingError, JSONEditingErrorCode } from 'vs/workbench/services/configuration/common/jsonEditing';
 import { ITextModel } from 'vs/editor/common/model';
-import { registerSingleton } from 'vs/platform/instantiation/common/extensions';
+import { InstantiationType, registerSingleton } from 'vs/platform/instantiation/common/extensions';
 
 export class JSONEditingService implements IJSONEditingService {
 
@@ -35,22 +34,24 @@ export class JSONEditingService implements IJSONEditingService {
 		this.queue = new Queue<void>();
 	}
 
-	write(resource: URI, values: IJSONValue[], save: boolean): Promise<void> {
-		return Promise.resolve(this.queue.queue(() => this.doWriteConfiguration(resource, values, save))); // queue up writes to prevent race conditions
+	write(resource: URI, values: IJSONValue[]): Promise<void> {
+		return Promise.resolve(this.queue.queue(() => this.doWriteConfiguration(resource, values))); // queue up writes to prevent race conditions
 	}
 
-	private async doWriteConfiguration(resource: URI, values: IJSONValue[], save: boolean): Promise<void> {
-		const reference = await this.resolveAndValidate(resource, save);
-		await this.writeToBuffer(reference.object.textEditorModel, values);
-
-		reference.dispose();
+	private async doWriteConfiguration(resource: URI, values: IJSONValue[]): Promise<void> {
+		const reference = await this.resolveAndValidate(resource, true);
+		try {
+			await this.writeToBuffer(reference.object.textEditorModel, values);
+		} finally {
+			reference.dispose();
+		}
 	}
 
 	private async writeToBuffer(model: ITextModel, values: IJSONValue[]): Promise<any> {
 		let hasEdits: boolean = false;
 		for (const value of values) {
 			const edit = this.getEdits(model, value)[0];
-			hasEdits = this.applyEditsToBuffer(edit, model);
+			hasEdits = !!edit && this.applyEditsToBuffer(edit, model);
 		}
 		if (hasEdits) {
 			return this.textFileService.save(model.uri);
@@ -61,7 +62,7 @@ export class JSONEditingService implements IJSONEditingService {
 		const startPosition = model.getPositionAt(edit.offset);
 		const endPosition = model.getPositionAt(edit.offset + edit.length);
 		const range = new Range(startPosition.lineNumber, startPosition.column, endPosition.lineNumber, endPosition.column);
-		let currentText = model.getValueInRange(range);
+		const currentText = model.getValueInRange(range);
 		if (edit.content !== currentText) {
 			const editOperation = currentText ? EditOperation.replace(range, edit.content) : EditOperation.insert(startPosition, edit.content);
 			model.pushEditOperations([new Selection(startPosition.lineNumber, startPosition.column, startPosition.lineNumber, startPosition.column)], [editOperation], () => []);
@@ -73,11 +74,11 @@ export class JSONEditingService implements IJSONEditingService {
 	private getEdits(model: ITextModel, configurationValue: IJSONValue): Edit[] {
 		const { tabSize, insertSpaces } = model.getOptions();
 		const eol = model.getEOL();
-		const { key, value } = configurationValue;
+		const { path, value } = configurationValue;
 
-		// Without key, the entire settings file is being replaced, so we just use JSON.stringify
-		if (!key) {
-			const content = JSON.stringify(value, null, insertSpaces ? strings.repeat(' ', tabSize) : '\t');
+		// With empty path the entire file is being replaced, so we just use JSON.stringify
+		if (!path.length) {
+			const content = JSON.stringify(value, null, insertSpaces ? ' '.repeat(tabSize) : '\t');
 			return [{
 				content,
 				length: content.length,
@@ -85,7 +86,7 @@ export class JSONEditingService implements IJSONEditingService {
 			}];
 		}
 
-		return setProperty(model.getValue(), [key], value, { tabSize, insertSpaces, eol });
+		return setProperty(model.getValue(), path, value, { tabSize, insertSpaces, eol });
 	}
 
 	private async resolveModelReference(resource: URI): Promise<IReference<IResolvedTextEditorModel>> {
@@ -108,12 +109,8 @@ export class JSONEditingService implements IJSONEditingService {
 		const model = reference.object.textEditorModel;
 
 		if (this.hasParseErrors(model)) {
+			reference.dispose();
 			return this.reject<IReference<IResolvedTextEditorModel>>(JSONEditingErrorCode.ERROR_INVALID_FILE);
-		}
-
-		// Target cannot be dirty if not writing into buffer
-		if (checkDirty && this.textFileService.isDirty(resource)) {
-			return this.reject<IReference<IResolvedTextEditorModel>>(JSONEditingErrorCode.ERROR_FILE_DIRTY);
 		}
 
 		return reference;
@@ -130,11 +127,8 @@ export class JSONEditingService implements IJSONEditingService {
 			case JSONEditingErrorCode.ERROR_INVALID_FILE: {
 				return nls.localize('errorInvalidFile', "Unable to write into the file. Please open the file to correct errors/warnings in the file and try again.");
 			}
-			case JSONEditingErrorCode.ERROR_FILE_DIRTY: {
-				return nls.localize('errorFileDirty', "Unable to write into the file because the file is dirty. Please save the file and try again.");
-			}
 		}
 	}
 }
 
-registerSingleton(IJSONEditingService, JSONEditingService, true);
+registerSingleton(IJSONEditingService, JSONEditingService, InstantiationType.Delayed);
