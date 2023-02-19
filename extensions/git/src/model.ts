@@ -788,11 +788,14 @@ export class Model implements IRemoteSourcePublisherRegistry, IPostCommitCommand
 	}
 
 	private async isRepositoryOutsideWorkspace(repositoryPath: string): Promise<boolean> {
-		if (!workspace.workspaceFolders || workspace.workspaceFolders.length === 0) {
+		const workspaceFolders = (workspace.workspaceFolders || [])
+			.filter(folder => folder.uri.scheme === 'file');
+
+		if (workspaceFolders.length === 0) {
 			return true;
 		}
 
-		const result = await Promise.all(workspace.workspaceFolders.map(async folder => {
+		const result = await Promise.all(workspaceFolders.map(async folder => {
 			const workspaceFolderRealPath = await this.getWorkspaceFolderRealPath(folder);
 			return workspaceFolderRealPath ? pathEquals(workspaceFolderRealPath, repositoryPath) || isDescendant(workspaceFolderRealPath, repositoryPath) : undefined;
 		}));
@@ -808,7 +811,8 @@ export class Model implements IRemoteSourcePublisherRegistry, IPostCommitCommand
 				result = await fs.promises.realpath(workspaceFolder.uri.fsPath, { encoding: 'utf8' });
 				this._workspaceFolders.set(workspaceFolder.uri.fsPath, result);
 			} catch (err) {
-				// noop - Folder does not exist
+				// noop - Workspace folder does not exist
+				this.logger.trace(`Failed to resolve workspace folder: "${workspaceFolder.uri.fsPath}". ${err}`);
 			}
 		}
 
