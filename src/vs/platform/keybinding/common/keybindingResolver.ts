@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { implies, ContextKeyExpression, ContextKeyExprType, IContext, IContextKeyService, expressionsAreEqualWithConstantSubstitution } from 'vs/platform/contextkey/common/contextkey';
-import { ResolvedKeybindingItem } from 'vs/platform/keybinding/common/resolvedKeybindingItem';
+import { implies, ContextKeyExpression, ContextKeyExprType, IContext, IContextKeyService, expressionsAreEqualWithConstantSubstitution } from '../../contextkey/common/contextkey.js';
+import { ResolvedKeybindingItem } from './resolvedKeybindingItem.js';
 
 //#region resolution-result
 
@@ -27,7 +27,7 @@ export type ResolutionResult =
 
 // util definitions to make working with the above types easier within this module:
 
-const NoMatchingKb: ResolutionResult = { kind: ResultKind.NoMatchingKb };
+export const NoMatchingKb: ResolutionResult = { kind: ResultKind.NoMatchingKb };
 const MoreChordsNeeded: ResolutionResult = { kind: ResultKind.MoreChordsNeeded };
 function KbFound(commandId: string | null, commandArgs: any, isBubble: boolean): ResolutionResult {
 	return { kind: ResultKind.KbFound, commandId, commandArgs, isBubble };
@@ -281,12 +281,12 @@ export class KeybindingResolver {
 		return result;
 	}
 
-	public lookupPrimaryKeybinding(commandId: string, context: IContextKeyService): ResolvedKeybindingItem | null {
+	public lookupPrimaryKeybinding(commandId: string, context: IContextKeyService, enforceContextCheck = false): ResolvedKeybindingItem | null {
 		const items = this._lookupMap.get(commandId);
 		if (typeof items === 'undefined' || items.length === 0) {
 			return null;
 		}
-		if (items.length === 1) {
+		if (items.length === 1 && !enforceContextCheck) {
 			return items[0];
 		}
 
@@ -295,6 +295,10 @@ export class KeybindingResolver {
 			if (context.contextMatchesRules(item.when)) {
 				return item;
 			}
+		}
+
+		if (enforceContextCheck) {
+			return null;
 		}
 
 		return items[items.length - 1];

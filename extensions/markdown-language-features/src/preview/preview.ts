@@ -53,7 +53,7 @@ class MarkdownPreview extends Disposable implements WebviewResourceProvider {
 	private readonly _webviewPanel: vscode.WebviewPanel;
 
 	private _line: number | undefined;
-	private _scrollToFragment: string | undefined;
+	private readonly _scrollToFragment: string | undefined;
 	private _firstUpdate = true;
 	private _currentVersion?: PreviewDocumentVersion;
 	private _isScrolling = false;
@@ -95,7 +95,7 @@ class MarkdownPreview extends Disposable implements WebviewResourceProvider {
 		}
 
 		this._register(_contributionProvider.onContributionsChanged(() => {
-			setTimeout(() => this.refresh(), 0);
+			setTimeout(() => this.refresh(true), 0);
 		}));
 
 		this._register(vscode.workspace.onDidChangeTextDocument(event => {
@@ -110,15 +110,17 @@ class MarkdownPreview extends Disposable implements WebviewResourceProvider {
 			}
 		}));
 
-		const watcher = this._register(vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(resource, '*')));
-		this._register(watcher.onDidChange(uri => {
-			if (this.isPreviewOf(uri)) {
-				// Only use the file system event when VS Code does not already know about the file
-				if (!vscode.workspace.textDocuments.some(doc => doc.uri.toString() === uri.toString())) {
-					this.refresh();
+		if (vscode.workspace.fs.isWritableFileSystem(resource.scheme)) {
+			const watcher = this._register(vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(resource, '*')));
+			this._register(watcher.onDidChange(uri => {
+				if (this.isPreviewOf(uri)) {
+					// Only use the file system event when VS Code does not already know about the file
+					if (!vscode.workspace.textDocuments.some(doc => doc.uri.toString() === uri.toString())) {
+						this.refresh();
+					}
 				}
-			}
-		}));
+			}));
+		}
 
 		this._register(this._webviewPanel.webview.onDidReceiveMessage((e: FromWebviewMessage.Type) => {
 			if (e.source !== this._resource.toString()) {
@@ -221,7 +223,7 @@ class MarkdownPreview extends Disposable implements WebviewResourceProvider {
 			return;
 		}
 
-		this._logger.verbose('MarkdownPreview', 'updateForView', { markdownFile: this._resource });
+		this._logger.trace('MarkdownPreview', 'updateForView', { markdownFile: this._resource });
 		this._line = topLine;
 		this.postMessage({
 			type: 'updateView',
@@ -428,7 +430,17 @@ class MarkdownPreview extends Disposable implements WebviewResourceProvider {
 	}
 
 	get cspSource() {
-		return this._webviewPanel.webview.cspSource;
+		return [
+			this._webviewPanel.webview.cspSource,
+
+			// On web, we also need to allow loading of resources from contributed extensions
+			...this._contributionProvider.contributions.previewResourceRoots
+				.filter(root => root.scheme === 'http' || root.scheme === 'https')
+				.map(root => {
+					const dirRoot = root.path.endsWith('/') ? root : root.with({ path: root.path + '/' });
+					return dirRoot.toString();
+				}),
+		].join(' ');
 	}
 
 	//#endregion
@@ -442,8 +454,8 @@ export interface IManagedMarkdownPreview {
 	readonly onDispose: vscode.Event<void>;
 	readonly onDidChangeViewState: vscode.Event<vscode.WebviewPanelOnDidChangeViewStateEvent>;
 
+	copyImage(id: string): void;
 	dispose(): void;
-
 	refresh(): void;
 	updateConfiguration(): void;
 
@@ -513,6 +525,15 @@ export class StaticMarkdownPreview extends Disposable implements IManagedMarkdow
 				this._preview.scrollTo(event.line);
 			}
 		}));
+	}
+
+	copyImage(id: string) {
+		this._webviewPanel.reveal();
+		this._preview.postMessage({
+			type: 'copyImage',
+			source: this.resource.toString(),
+			id: id
+		});
 	}
 
 	private readonly _onDispose = this._register(new vscode.EventEmitter<void>());
@@ -659,6 +680,15 @@ export class DynamicMarkdownPreview extends Disposable implements IManagedMarkdo
 				this.update(editor.document.uri, line ? new StartingScrollLine(line) : undefined);
 			}
 		}));
+	}
+
+	copyImage(id: string) {
+		this._webviewPanel.reveal();
+		this._preview.postMessage({
+			type: 'copyImage',
+			source: this.resource.toString(),
+			id: id
+		});
 	}
 
 	private readonly _onDisposeEmitter = this._register(new vscode.EventEmitter<void>());

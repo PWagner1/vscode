@@ -6,7 +6,7 @@
 import {
 	Connection,
 	TextDocuments, InitializeParams, InitializeResult, NotificationType, RequestType,
-	DocumentRangeFormattingRequest, Disposable, ServerCapabilities, TextDocumentSyncKind, TextEdit, DocumentFormattingRequest, TextDocumentIdentifier, FormattingOptions, Diagnostic
+	DocumentRangeFormattingRequest, Disposable, ServerCapabilities, TextDocumentSyncKind, TextEdit, DocumentFormattingRequest, TextDocumentIdentifier, FormattingOptions, Diagnostic, CodeAction, CodeActionKind
 } from 'vscode-languageserver';
 
 import { runSafe, runSafeAsync } from './utils/runner';
@@ -14,6 +14,7 @@ import { DiagnosticsSupport, registerDiagnosticsPullSupport, registerDiagnostics
 import { TextDocument, JSONDocument, JSONSchema, getLanguageService, DocumentLanguageSettings, SchemaConfiguration, ClientCapabilities, Range, Position, SortOptions } from 'vscode-json-languageservice';
 import { getLanguageModelCache } from './languageModelCache';
 import { Utils, URI } from 'vscode-uri';
+import * as l10n from '@vscode/l10n';
 
 type ISchemaAssociations = Record<string, string[]>;
 
@@ -37,6 +38,10 @@ namespace ForceValidateRequest {
 
 namespace LanguageStatusRequest {
 	export const type: RequestType<string, JSONLanguageStatus, any> = new RequestType('json/languageStatus');
+}
+
+namespace ValidateContentRequest {
+	export const type: RequestType<{ schemaUri: string; content: string }, Diagnostic[], any> = new RequestType('json/validateContent');
 }
 
 export interface DocumentSortingParams {
@@ -74,6 +79,8 @@ export interface RuntimeEnvironment {
 		setTimeout(callback: (...args: any[]) => void, ms: number, ...args: any[]): Disposable;
 	};
 }
+
+const sortCodeActionKind = CodeActionKind.Source.concat('.sort', '.json');
 
 export function startServer(connection: Connection, runtime: RuntimeEnvironment) {
 
@@ -134,7 +141,7 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 	// in the passed params the rootPath of the workspace plus the client capabilities.
 	connection.onInitialize((params: InitializeParams): InitializeResult => {
 
-		const initializationOptions = params.initializationOptions as any || {};
+		const initializationOptions = params.initializationOptions || {};
 
 		const handledProtocols = initializationOptions?.handledSchemaProtocols;
 
@@ -188,6 +195,9 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 				documentSelector: null,
 				interFileDependencies: false,
 				workspaceDiagnostics: false
+			},
+			codeActionProvider: {
+				codeActionKinds: [sortCodeActionKind]
 			}
 		};
 
@@ -297,6 +307,14 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 		return [];
 	});
 
+	connection.onRequest(ValidateContentRequest.type, async ({ schemaUri, content }) => {
+		const docURI = 'vscode://schemas/temp/' + new Date().getTime();
+		const document = TextDocument.create(docURI, 'json', 1, content);
+		updateConfiguration([{ uri: schemaUri, fileMatch: [docURI] }]);
+		return await validateTextDocument(document);
+	});
+
+
 	connection.onRequest(LanguageStatusRequest.type, async uri => {
 		const document = documents.get(uri);
 		if (document) {
@@ -317,7 +335,7 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 		return [];
 	});
 
-	function updateConfiguration() {
+	function updateConfiguration(extraSchemas?: SchemaConfiguration[]) {
 		const languageSettings = {
 			validate: validateEnabled,
 			allowComments: true,
@@ -348,6 +366,10 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 				}
 			});
 		}
+		if (extraSchemas) {
+			languageSettings.schemas.push(...extraSchemas);
+		}
+
 		languageService.configure(languageSettings);
 
 		diagnosticsSupport?.requestRefresh();
@@ -422,6 +444,21 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 			}
 			return [];
 		}, [], `Error while computing document symbols for ${documentSymbolParams.textDocument.uri}`, token);
+	});
+
+	connection.onCodeAction((codeActionParams, token) => {
+		return runSafeAsync(runtime, async () => {
+			const document = documents.get(codeActionParams.textDocument.uri);
+			if (document) {
+				const sortCodeAction = CodeAction.create('Sort JSON', sortCodeActionKind);
+				sortCodeAction.command = {
+					command: 'json.sort',
+					title: l10n.t('Sort JSON')
+				};
+				return [sortCodeAction];
+			}
+			return [];
+		}, [], `Error while computing code actions for ${codeActionParams.textDocument.uri}`, token);
 	});
 
 	function onFormat(textDocument: TextDocumentIdentifier, range: Range | undefined, options: FormattingOptions): TextEdit[] {
@@ -512,3 +549,7 @@ export function startServer(connection: Connection, runtime: RuntimeEnvironment)
 function getFullRange(document: TextDocument): Range {
 	return Range.create(Position.create(0, 0), document.positionAt(document.getText().length));
 }
+
+
+
+

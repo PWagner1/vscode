@@ -5,10 +5,11 @@
 
 const fs = require('fs');
 
-// Complete list of directories where yarn should be executed to install node modules
+// Complete list of directories where npm should be executed to install node modules
 const dirs = [
 	'',
 	'build',
+	'build/monaco-editor-playground',
 	'extensions',
 	'extensions/configuration-editing',
 	'extensions/css-language-features',
@@ -29,11 +30,11 @@ const dirs = [
 	'extensions/jake',
 	'extensions/json-language-features',
 	'extensions/json-language-features/server',
-	'extensions/markdown-language-features/server',
 	'extensions/markdown-language-features',
 	'extensions/markdown-math',
 	'extensions/media-preview',
 	'extensions/merge-conflict',
+	'extensions/mermaid-chat-features',
 	'extensions/microsoft-authentication',
 	'extensions/notebook-renderers',
 	'extensions/npm',
@@ -41,9 +42,12 @@ const dirs = [
 	'extensions/references-view',
 	'extensions/search-result',
 	'extensions/simple-browser',
+	'extensions/tunnel-forwarding',
+	'extensions/terminal-suggest',
 	'extensions/typescript-language-features',
 	'extensions/vscode-api-tests',
 	'extensions/vscode-colorize-tests',
+	'extensions/vscode-colorize-perf-tests',
 	'extensions/vscode-test-resolver',
 	'remote',
 	'remote/web',
@@ -51,6 +55,9 @@ const dirs = [
 	'test/integration/browser',
 	'test/monaco',
 	'test/smoke',
+	'test/mcp',
+	'.vscode/extensions/vscode-selfhost-import-aid',
+	'.vscode/extensions/vscode-selfhost-test-provider',
 ];
 
 if (fs.existsSync(`${__dirname}/../../.build/distro/npm`)) {

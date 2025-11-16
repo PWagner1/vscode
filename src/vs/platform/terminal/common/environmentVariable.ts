@@ -3,30 +3,30 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IProcessEnvironment } from 'vs/base/common/platform';
-import { IWorkspaceFolderData } from 'vs/platform/workspace/common/workspace';
+import { IProcessEnvironment } from '../../../base/common/platform.js';
+import { IWorkspaceFolderData } from '../../workspace/common/workspace.js';
 
 export enum EnvironmentVariableMutatorType {
 	Replace = 1,
 	Append = 2,
 	Prepend = 3
 }
-// export enum EnvironmentVariableMutatorTiming {
-// 	AtSpawn = 1,
-// 	AfterShellIntegration = 2
-// 	// TODO: Do we need a both?
-// }
 export interface IEnvironmentVariableMutator {
 	readonly variable: string;
 	readonly value: string;
 	readonly type: EnvironmentVariableMutatorType;
 	readonly scope?: EnvironmentVariableScope;
-	// readonly timing?: EnvironmentVariableMutatorTiming;
+	readonly options?: IEnvironmentVariableMutatorOptions;
 }
 
-export interface IEnvironmentDescriptionMutator {
+export interface IEnvironmentVariableCollectionDescription {
 	readonly description: string | undefined;
 	readonly scope?: EnvironmentVariableScope;
+}
+
+export interface IEnvironmentVariableMutatorOptions {
+	applyAtProcessCreation?: boolean;
+	applyAtShellIntegration?: boolean;
 }
 
 export type EnvironmentVariableScope = {
@@ -35,14 +35,14 @@ export type EnvironmentVariableScope = {
 
 export interface IEnvironmentVariableCollection {
 	readonly map: ReadonlyMap<string, IEnvironmentVariableMutator>;
-	readonly descriptionMap?: ReadonlyMap<string, IEnvironmentDescriptionMutator>;
+	readonly descriptionMap?: ReadonlyMap<string, IEnvironmentVariableCollectionDescription>;
 }
 
 /** [variable, mutator] */
 export type ISerializableEnvironmentVariableCollection = [string, IEnvironmentVariableMutator][];
 
-export type ISerializableEnvironmentDescriptionMap = [string, IEnvironmentDescriptionMutator][];
-export interface IExtensionOwnedEnvironmentDescriptionMutator extends IEnvironmentDescriptionMutator {
+export type ISerializableEnvironmentDescriptionMap = [string, IEnvironmentVariableCollectionDescription][];
+export interface IExtensionOwnedEnvironmentDescriptionMutator extends IEnvironmentVariableCollectionDescription {
 	readonly extensionIdentifier: string;
 }
 
@@ -74,7 +74,8 @@ export interface IMergedEnvironmentVariableCollection {
 	getVariableMap(scope: EnvironmentVariableScope | undefined): Map<string, IExtensionOwnedEnvironmentVariableMutator[]>;
 	/**
 	 * Gets the description map for a given scope.
-	 * @param scope The scope to get the description map for. If undefined, the global scope is used.
+	 * @param scope The scope to get the description map for. If undefined, description map for the
+	 * global scope is returned.
 	 */
 	getDescriptionMap(scope: EnvironmentVariableScope | undefined): Map<string, string | undefined>;
 	/**

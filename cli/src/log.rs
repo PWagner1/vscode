@@ -26,20 +26,19 @@ pub fn next_counter() -> u32 {
 }
 
 // Log level
-#[derive(clap::ArgEnum, PartialEq, Eq, PartialOrd, Clone, Copy, Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(
+	clap::ValueEnum, PartialEq, Eq, PartialOrd, Clone, Copy, Debug, Serialize, Deserialize, Default,
+)]
 pub enum Level {
 	Trace = 0,
 	Debug,
 	#[default]
- Info,
+	Info,
 	Warn,
 	Error,
 	Critical,
 	Off,
 }
-
-
 
 impl fmt::Display for Level {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -150,7 +149,7 @@ impl LogSink for StdioLogSink {
 	}
 
 	fn write_result(&self, message: &str) {
-		println!("{}", message);
+		println!("{message}");
 	}
 }
 
@@ -160,9 +159,21 @@ pub struct FileLogSink {
 	file: Arc<std::sync::Mutex<std::fs::File>>,
 }
 
+const FILE_LOG_SIZE_LIMIT: u64 = 1024 * 1024 * 10; // 10MB
+
 impl FileLogSink {
 	pub fn new(level: Level, path: &Path) -> std::io::Result<Self> {
-		let file = std::fs::File::create(path)?;
+		// Truncate the service log occasionally to avoid growing infinitely
+		if matches!(path.metadata(), Ok(m) if m.len() > FILE_LOG_SIZE_LIMIT) {
+			// ignore errors, can happen if another process is writing right now
+			let _ = std::fs::remove_file(path);
+		}
+
+		let file = std::fs::OpenOptions::new()
+			.append(true)
+			.create(true)
+			.open(path)?;
+
 		Ok(Self {
 			level,
 			file: Arc::new(std::sync::Mutex::new(file)),
@@ -203,7 +214,7 @@ impl Logger {
 	}
 
 	pub fn span(&self, name: &str) -> SpanBuilder {
-		self.tracer.span_builder(format!("serverlauncher/{}", name))
+		self.tracer.span_builder(format!("serverlauncher/{name}"))
 	}
 
 	pub fn tracer(&self) -> &Tracer {
@@ -226,8 +237,8 @@ impl Logger {
 	pub fn prefixed(&self, prefix: &str) -> Logger {
 		Logger {
 			prefix: Some(match &self.prefix {
-				Some(p) => format!("{}{} ", p, prefix),
-				None => format!("{} ", prefix),
+				Some(p) => format!("{p}{prefix} "),
+				None => format!("{prefix} "),
 			}),
 			..self.clone()
 		}
@@ -271,7 +282,7 @@ pub struct DownloadLogger<'a> {
 	logger: &'a Logger,
 }
 
-impl<'a> crate::util::io::ReportCopyProgress for DownloadLogger<'a> {
+impl crate::util::io::ReportCopyProgress for DownloadLogger<'_> {
 	fn report_progress(&mut self, bytes_so_far: u64, total_bytes: u64) {
 		if total_bytes > 0 {
 			self.logger.emit(
@@ -301,22 +312,19 @@ fn format(level: Level, prefix: &str, message: &str, use_colors: bool) -> String
 
 	if use_colors {
 		if let Some(c) = level.color_code() {
-			return format!(
-				"\x1b[2m[{}]\x1b[0m {}{}\x1b[0m {}{}\n",
-				timestamp, c, name, prefix, message
-			);
+			return format!("\x1b[2m[{timestamp}]\x1b[0m {c}{name}\x1b[0m {prefix}{message}\n");
 		}
 	}
 
-	format!("[{}] {} {}{}\n", timestamp, name, prefix, message)
+	format!("[{timestamp}] {name} {prefix}{message}\n")
 }
 
 pub fn emit(level: Level, prefix: &str, message: &str) {
-	let line = format(level, prefix, message, true);
-	if level == Level::Trace {
-		print!("\x1b[2m{}\x1b[0m", line);
+	let line = format(level, prefix, message, *COLORS_ENABLED);
+	if level == Level::Trace && *COLORS_ENABLED {
+		print!("\x1b[2m{line}\x1b[0m");
 	} else {
-		print!("{}", line);
+		print!("{line}");
 	}
 }
 
@@ -344,8 +352,7 @@ impl log::Log for RustyLogger {
 
 		// exclude noisy log modules:
 		let src = match record.module_path() {
-			Some("russh::cipher") => return,
-			Some("russh::negotiation") => return,
+			Some("russh::cipher" | "russh::negotiation" | "russh::kex::dh") => return,
 			Some(s) => s,
 			None => "<unknown>",
 		};

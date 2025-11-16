@@ -2,12 +2,15 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import * as assert from 'assert';
-import { isWindows } from 'vs/base/common/platform';
-import { URI, UriComponents } from 'vs/base/common/uri';
+import assert from 'assert';
+import { isWindows } from '../../common/platform.js';
+import { URI, UriComponents, isUriComponents } from '../../common/uri.js';
+import { ensureNoDisposablesAreLeakedInTestSuite } from './utils.js';
 
 
 suite('URI', () => {
+	ensureNoDisposablesAreLeakedInTestSuite();
+
 	test('file#toString', () => {
 		assert.strictEqual(URI.file('c:/win/path').toString(), 'file:///c%3A/win/path');
 		assert.strictEqual(URI.file('C:/win/path').toString(), 'file:///c%3A/win/path');
@@ -467,6 +470,36 @@ suite('URI', () => {
 			with() { return this; },
 			toString() { return ''; }
 		}), true);
+
+		assert.strictEqual(URI.isUri(1), false);
+		assert.strictEqual(URI.isUri('1'), false);
+		assert.strictEqual(URI.isUri('http://sample.com'), false);
+		assert.strictEqual(URI.isUri(null), false);
+		assert.strictEqual(URI.isUri(undefined), false);
+	});
+
+	test('isUriComponents', function () {
+
+		assert.ok(isUriComponents(URI.file('a')));
+		assert.ok(isUriComponents(URI.file('a').toJSON()));
+		assert.ok(isUriComponents(URI.file('')));
+		assert.ok(isUriComponents(URI.file('').toJSON()));
+
+		assert.strictEqual(isUriComponents(1), false);
+		assert.strictEqual(isUriComponents(true), false);
+		assert.strictEqual(isUriComponents('true'), false);
+		assert.strictEqual(isUriComponents({}), false);
+		assert.strictEqual(isUriComponents({ scheme: '' }), true); // valid components but INVALID uri
+		assert.strictEqual(isUriComponents({ scheme: 'fo' }), true);
+		assert.strictEqual(isUriComponents({ scheme: 'fo', path: '/p' }), true);
+		assert.strictEqual(isUriComponents({ path: '/p' }), false);
+	});
+
+	test('from, from(strict), revive', function () {
+
+		assert.throws(() => URI.from({ scheme: '' }, true));
+		assert.strictEqual(URI.from({ scheme: '' }).scheme, 'file');
+		assert.strictEqual(URI.revive({ scheme: '' }).scheme, '');
 	});
 
 	test('Unable to open \'%A0.txt\': URI malformed #76506, part 2', function () {
@@ -602,4 +635,15 @@ suite('URI', () => {
 		assert.strictEqual(URI.parse('http://user@[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]:80/index.html').toString(), 'http://user@[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:80/index.html');
 		assert.strictEqual(URI.parse('http://us[er@[FEDC:BA98:7654:3210:FEDC:BA98:7654:3210]:80/index.html').toString(), 'http://us%5Ber@[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:80/index.html');
 	});
+
+	test('File paths containing apostrophes break URI parsing and cannot be opened #276075', function () {
+		if (isWindows) {
+			const filePath = 'C:\\Users\\Abd-al-Haseeb\'s_Dell\\Studio\\w3mage\\wp-content\\database.ht.sqlite';
+			const uri = URI.file(filePath);
+			assert.strictEqual(uri.path, '/C:/Users/Abd-al-Haseeb\'s_Dell/Studio/w3mage/wp-content/database.ht.sqlite');
+			assert.strictEqual(uri.fsPath, 'c:\\Users\\Abd-al-Haseeb\'s_Dell\\Studio\\w3mage\\wp-content\\database.ht.sqlite');
+		}
+	});
+
+
 });

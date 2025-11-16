@@ -3,40 +3,56 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import 'vs/css!./media/actions';
+import './media/actions.css';
 
-import { localize } from 'vs/nls';
-import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
-import { DomEmitter } from 'vs/base/browser/event';
-import { Color } from 'vs/base/common/color';
-import { Event } from 'vs/base/common/event';
-import { IDisposable, toDisposable, dispose, DisposableStore } from 'vs/base/common/lifecycle';
-import { getDomNodePagePosition, createStyleSheet, createCSSRule, append, $ } from 'vs/base/browser/dom';
-import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
-import { IContextKeyService } from 'vs/platform/contextkey/common/contextkey';
-import { Context } from 'vs/platform/contextkey/browser/contextKeyService';
-import { StandardKeyboardEvent } from 'vs/base/browser/keyboardEvent';
-import { RunOnceScheduler } from 'vs/base/common/async';
-import { ILayoutService } from 'vs/platform/layout/browser/layoutService';
-import { Registry } from 'vs/platform/registry/common/platform';
-import { registerAction2, Action2, MenuRegistry } from 'vs/platform/actions/common/actions';
-import { IStorageService } from 'vs/platform/storage/common/storage';
-import { clamp } from 'vs/base/common/numbers';
-import { KeyCode } from 'vs/base/common/keyCodes';
-import { IConfigurationRegistry, Extensions as ConfigurationExtensions } from 'vs/platform/configuration/common/configurationRegistry';
-import { ILogService } from 'vs/platform/log/common/log';
-import { IWorkingCopyService } from 'vs/workbench/services/workingCopy/common/workingCopyService';
-import { ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
-import { Categories } from 'vs/platform/action/common/actionCommonCategories';
-import { IWorkingCopyBackupService } from 'vs/workbench/services/workingCopy/common/workingCopyBackup';
-import { ResolutionResult, ResultKind } from 'vs/platform/keybinding/common/keybindingResolver';
+import { localize, localize2 } from '../../../nls.js';
+import { IKeybindingService } from '../../../platform/keybinding/common/keybinding.js';
+import { DomEmitter } from '../../../base/browser/event.js';
+import { Color } from '../../../base/common/color.js';
+import { Emitter, Event } from '../../../base/common/event.js';
+import { IDisposable, toDisposable, dispose, DisposableStore, setDisposableTracker, DisposableTracker, DisposableInfo } from '../../../base/common/lifecycle.js';
+import { getDomNodePagePosition, append, $, getActiveDocument, onDidRegisterWindow, getWindows } from '../../../base/browser/dom.js';
+import { createCSSRule, createStyleSheet } from '../../../base/browser/domStylesheets.js';
+import { IConfigurationService } from '../../../platform/configuration/common/configuration.js';
+import { ContextKeyExpr, IContextKeyService, RawContextKey } from '../../../platform/contextkey/common/contextkey.js';
+import { Context } from '../../../platform/contextkey/browser/contextKeyService.js';
+import { StandardKeyboardEvent } from '../../../base/browser/keyboardEvent.js';
+import { RunOnceScheduler } from '../../../base/common/async.js';
+import { ILayoutService } from '../../../platform/layout/browser/layoutService.js';
+import { Registry } from '../../../platform/registry/common/platform.js';
+import { registerAction2, Action2, MenuRegistry } from '../../../platform/actions/common/actions.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../platform/storage/common/storage.js';
+import { clamp } from '../../../base/common/numbers.js';
+import { KeyCode } from '../../../base/common/keyCodes.js';
+import { IConfigurationRegistry, Extensions as ConfigurationExtensions } from '../../../platform/configuration/common/configurationRegistry.js';
+import { ILogService } from '../../../platform/log/common/log.js';
+import { IWorkingCopyService } from '../../services/workingCopy/common/workingCopyService.js';
+import { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
+import { Categories } from '../../../platform/action/common/actionCommonCategories.js';
+import { IWorkingCopyBackupService } from '../../services/workingCopy/common/workingCopyBackup.js';
+import { ResolutionResult, ResultKind } from '../../../platform/keybinding/common/keybindingResolver.js';
+import { IDialogService } from '../../../platform/dialogs/common/dialogs.js';
+import { IOutputService } from '../../services/output/common/output.js';
+import { windowLogId } from '../../services/log/common/logConstants.js';
+import { ByteSize } from '../../../platform/files/common/files.js';
+import { IQuickInputService, IQuickPickItem } from '../../../platform/quickinput/common/quickInput.js';
+import { IUserDataProfileService } from '../../services/userDataProfile/common/userDataProfile.js';
+import { IEditorService } from '../../services/editor/common/editorService.js';
+import product from '../../../platform/product/common/product.js';
+import { CommandsRegistry } from '../../../platform/commands/common/commands.js';
+import { IEnvironmentService } from '../../../platform/environment/common/environment.js';
+import { IProductService } from '../../../platform/product/common/productService.js';
+import { IDefaultAccountService } from '../../services/accounts/common/defaultAccount.js';
+import { IAuthenticationService } from '../../services/authentication/common/authentication.js';
+import { IAuthenticationAccessService } from '../../services/authentication/browser/authenticationAccessService.js';
+import { IPolicyService } from '../../../platform/policy/common/policy.js';
 
 class InspectContextKeysAction extends Action2 {
 
 	constructor() {
 		super({
 			id: 'workbench.action.inspectContextKeys',
-			title: { value: localize('inspect context keys', "Inspect Context Keys"), original: 'Inspect Context Keys' },
+			title: localize2('inspect context keys', 'Inspect Context Keys'),
 			category: Categories.Developer,
 			f1: true
 		});
@@ -47,22 +63,20 @@ class InspectContextKeysAction extends Action2 {
 
 		const disposables = new DisposableStore();
 
-		const stylesheet = createStyleSheet();
-		disposables.add(toDisposable(() => {
-			stylesheet.parentNode?.removeChild(stylesheet);
-		}));
+		const stylesheet = createStyleSheet(undefined, undefined, disposables);
 		createCSSRule('*', 'cursor: crosshair !important;', stylesheet);
 
 		const hoverFeedback = document.createElement('div');
-		document.body.appendChild(hoverFeedback);
-		disposables.add(toDisposable(() => document.body.removeChild(hoverFeedback)));
+		const activeDocument = getActiveDocument();
+		activeDocument.body.appendChild(hoverFeedback);
+		disposables.add(toDisposable(() => hoverFeedback.remove()));
 
 		hoverFeedback.style.position = 'absolute';
 		hoverFeedback.style.pointerEvents = 'none';
 		hoverFeedback.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
 		hoverFeedback.style.zIndex = '1000';
 
-		const onMouseMove = disposables.add(new DomEmitter(document.body, 'mousemove', true));
+		const onMouseMove = disposables.add(new DomEmitter(activeDocument, 'mousemove', true));
 		disposables.add(onMouseMove.event(e => {
 			const target = e.target as HTMLElement;
 			const position = getDomNodePagePosition(target);
@@ -73,10 +87,10 @@ class InspectContextKeysAction extends Action2 {
 			hoverFeedback.style.height = `${position.height}px`;
 		}));
 
-		const onMouseDown = disposables.add(new DomEmitter(document.body, 'mousedown', true));
+		const onMouseDown = disposables.add(new DomEmitter(activeDocument, 'mousedown', true));
 		Event.once(onMouseDown.event)(e => { e.preventDefault(); e.stopPropagation(); }, null, disposables);
 
-		const onMouseUp = disposables.add(new DomEmitter(document.body, 'mouseup', true));
+		const onMouseUp = disposables.add(new DomEmitter(activeDocument, 'mouseup', true));
 		Event.once(onMouseUp.event)(e => {
 			e.preventDefault();
 			e.stopPropagation();
@@ -89,6 +103,14 @@ class InspectContextKeysAction extends Action2 {
 	}
 }
 
+interface IScreencastKeyboardOptions {
+	readonly showKeys?: boolean;
+	readonly showKeybindings?: boolean;
+	readonly showCommands?: boolean;
+	readonly showCommandGroups?: boolean;
+	readonly showSingleEditorCursorMoves?: boolean;
+}
+
 class ToggleScreencastModeAction extends Action2 {
 
 	static disposable: IDisposable | undefined;
@@ -96,7 +118,7 @@ class ToggleScreencastModeAction extends Action2 {
 	constructor() {
 		super({
 			id: 'workbench.action.toggleScreencastMode',
-			title: { value: localize('toggle screencast mode', "Toggle Screencast Mode"), original: 'Toggle Screencast Mode' },
+			title: localize2('toggle screencast mode', 'Toggle Screencast Mode'),
 			category: Categories.Developer,
 			f1: true
 		});
@@ -115,13 +137,34 @@ class ToggleScreencastModeAction extends Action2 {
 
 		const disposables = new DisposableStore();
 
-		const container = layoutService.container;
+		const container = layoutService.activeContainer;
+
 		const mouseMarker = append(container, $('.screencast-mouse'));
 		disposables.add(toDisposable(() => mouseMarker.remove()));
 
-		const onMouseDown = disposables.add(new DomEmitter(container, 'mousedown', true));
-		const onMouseUp = disposables.add(new DomEmitter(container, 'mouseup', true));
-		const onMouseMove = disposables.add(new DomEmitter(container, 'mousemove', true));
+		const keyboardMarker = append(container, $('.screencast-keyboard'));
+		disposables.add(toDisposable(() => keyboardMarker.remove()));
+
+		const onMouseDown = disposables.add(new Emitter<MouseEvent>());
+		const onMouseUp = disposables.add(new Emitter<MouseEvent>());
+		const onMouseMove = disposables.add(new Emitter<MouseEvent>());
+
+		function registerContainerListeners(container: HTMLElement, disposables: DisposableStore): void {
+			disposables.add(disposables.add(new DomEmitter(container, 'mousedown', true)).event(e => onMouseDown.fire(e)));
+			disposables.add(disposables.add(new DomEmitter(container, 'mouseup', true)).event(e => onMouseUp.fire(e)));
+			disposables.add(disposables.add(new DomEmitter(container, 'mousemove', true)).event(e => onMouseMove.fire(e)));
+		}
+
+		for (const { window, disposables } of getWindows()) {
+			registerContainerListeners(layoutService.getContainer(window), disposables);
+		}
+
+		disposables.add(onDidRegisterWindow(({ window, disposables }) => registerContainerListeners(layoutService.getContainer(window), disposables)));
+
+		disposables.add(layoutService.onDidChangeActiveContainer(() => {
+			layoutService.activeContainer.appendChild(mouseMarker);
+			layoutService.activeContainer.appendChild(keyboardMarker);
+		}));
 
 		const updateMouseIndicatorColor = () => {
 			mouseMarker.style.borderColor = Color.fromHex(configurationService.getValue<string>('screencastMode.mouseIndicatorColor')).toString();
@@ -156,9 +199,6 @@ class ToggleScreencastModeAction extends Action2 {
 				mouseMoveListener.dispose();
 			});
 		}));
-
-		const keyboardMarker = append(container, $('.screencast-keyboard'));
-		disposables.add(toDisposable(() => keyboardMarker.remove()));
 
 		const updateKeyboardFontSize = () => {
 			keyboardMarker.style.fontSize = `${clamp(configurationService.getValue<number>('screencastMode.fontSize') || 56, 20, 100)}px`;
@@ -199,10 +239,23 @@ class ToggleScreencastModeAction extends Action2 {
 			}
 		}));
 
-		const onKeyDown = disposables.add(new DomEmitter(window, 'keydown', true));
-		const onCompositionStart = disposables.add(new DomEmitter(window, 'compositionstart', true));
-		const onCompositionUpdate = disposables.add(new DomEmitter(window, 'compositionupdate', true));
-		const onCompositionEnd = disposables.add(new DomEmitter(window, 'compositionend', true));
+		const onKeyDown = disposables.add(new Emitter<KeyboardEvent>());
+		const onCompositionStart = disposables.add(new Emitter<CompositionEvent>());
+		const onCompositionUpdate = disposables.add(new Emitter<CompositionEvent>());
+		const onCompositionEnd = disposables.add(new Emitter<CompositionEvent>());
+
+		function registerWindowListeners(window: Window, disposables: DisposableStore): void {
+			disposables.add(disposables.add(new DomEmitter(window, 'keydown', true)).event(e => onKeyDown.fire(e)));
+			disposables.add(disposables.add(new DomEmitter(window, 'compositionstart', true)).event(e => onCompositionStart.fire(e)));
+			disposables.add(disposables.add(new DomEmitter(window, 'compositionupdate', true)).event(e => onCompositionUpdate.fire(e)));
+			disposables.add(disposables.add(new DomEmitter(window, 'compositionend', true)).event(e => onCompositionEnd.fire(e)));
+		}
+
+		for (const { window, disposables } of getWindows()) {
+			registerWindowListeners(window, disposables);
+		}
+
+		disposables.add(onDidRegisterWindow(({ window, disposables }) => registerWindowListeners(window, disposables)));
 
 		let length = 0;
 		let composing: Element | undefined = undefined;
@@ -256,11 +309,12 @@ class ToggleScreencastModeAction extends Action2 {
 				return;
 			}
 
+			const options = configurationService.getValue<IScreencastKeyboardOptions>('screencastMode.keyboardOptions');
 			const event = new StandardKeyboardEvent(e);
 			const shortcut = keybindingService.softDispatch(event, event.target);
 
 			// Hide the single arrow key pressed
-			if (shortcut && shortcut.kind === ResultKind.KbFound && shortcut.commandId && configurationService.getValue('screencastMode.hideSingleEditorCursorMoves') && (
+			if (shortcut.kind === ResultKind.KbFound && shortcut.commandId && !(options.showSingleEditorCursorMoves ?? true) && (
 				['cursorLeft', 'cursorRight', 'cursorUp', 'cursorDown'].includes(shortcut.commandId))
 			) {
 				return;
@@ -277,18 +331,15 @@ class ToggleScreencastModeAction extends Action2 {
 				length = 0;
 			}
 
-			const format = configurationService.getValue<'keys' | 'command' | 'commandWithGroup' | 'commandAndKeys' | 'commandWithGroupAndKeys'>('screencastMode.keyboardShortcutsFormat');
 			const keybinding = keybindingService.resolveKeyboardEvent(event);
-			const command = (this._isKbFound(shortcut) && shortcut.commandId) ? MenuRegistry.getCommand(shortcut.commandId) : null;
+			const commandDetails = (this._isKbFound(shortcut) && shortcut.commandId) ? this.getCommandDetails(shortcut.commandId) : undefined;
 
-			let titleLabel = '';
+			let commandAndGroupLabel = commandDetails?.title;
 			let keyLabel: string | undefined | null = keybinding.getLabel();
 
-			if (command) {
-				titleLabel = typeof command.title === 'string' ? command.title : command.title.value;
-
-				if ((format === 'commandWithGroup' || format === 'commandWithGroupAndKeys') && command.category) {
-					titleLabel = `${typeof command.category === 'string' ? command.category : command.category.value}: ${titleLabel} `;
+			if (commandDetails) {
+				if ((options.showCommandGroups ?? false) && commandDetails.category) {
+					commandAndGroupLabel = `${commandDetails.category}: ${commandAndGroupLabel} `;
 				}
 
 				if (this._isKbFound(shortcut) && shortcut.commandId) {
@@ -301,13 +352,11 @@ class ToggleScreencastModeAction extends Action2 {
 				}
 			}
 
-			const onlyKeyboardShortcuts = configurationService.getValue('screencastMode.onlyKeyboardShortcuts');
-
-			if (format !== 'keys' && titleLabel && !onlyKeyboardShortcuts) {
-				append(keyboardMarker, $('span.title', {}, `${titleLabel} `));
+			if ((options.showCommands ?? true) && commandAndGroupLabel) {
+				append(keyboardMarker, $('span.title', {}, `${commandAndGroupLabel} `));
 			}
 
-			if (onlyKeyboardShortcuts || !titleLabel || (this._isKbFound(shortcut) && shortcut.commandId) && (format === 'keys' || format === 'commandAndKeys' || format === 'commandWithGroupAndKeys')) {
+			if ((options.showKeys ?? true) || ((options.showKeybindings ?? true) && this._isKbFound(shortcut))) {
 				// Fix label for arrow keys
 				keyLabel = keyLabel?.replace('UpArrow', '↑')
 					?.replace('DownArrow', '↓')
@@ -324,8 +373,27 @@ class ToggleScreencastModeAction extends Action2 {
 		ToggleScreencastModeAction.disposable = disposables;
 	}
 
-	private _isKbFound(resolutionResult: ResolutionResult | null): resolutionResult is { kind: ResultKind.KbFound; commandId: string | null; commandArgs: any; isBubble: boolean } {
-		return resolutionResult !== null && resolutionResult.kind === ResultKind.KbFound;
+	private _isKbFound(resolutionResult: ResolutionResult): resolutionResult is { kind: ResultKind.KbFound; commandId: string | null; commandArgs: unknown; isBubble: boolean } {
+		return resolutionResult.kind === ResultKind.KbFound;
+	}
+
+	private getCommandDetails(commandId: string): { title: string; category?: string } | undefined {
+		const fromMenuRegistry = MenuRegistry.getCommand(commandId);
+
+		if (fromMenuRegistry) {
+			return {
+				title: typeof fromMenuRegistry.title === 'string' ? fromMenuRegistry.title : fromMenuRegistry.title.value,
+				category: fromMenuRegistry.category ? (typeof fromMenuRegistry.category === 'string' ? fromMenuRegistry.category : fromMenuRegistry.category.value) : undefined
+			};
+		}
+
+		const fromCommandsRegistry = CommandsRegistry.getCommand(commandId);
+
+		if (fromCommandsRegistry?.metadata?.description) {
+			return { title: typeof fromCommandsRegistry.metadata.description === 'string' ? fromCommandsRegistry.metadata.description : fromCommandsRegistry.metadata.description.value };
+		}
+
+		return undefined;
 	}
 }
 
@@ -334,14 +402,19 @@ class LogStorageAction extends Action2 {
 	constructor() {
 		super({
 			id: 'workbench.action.logStorage',
-			title: { value: localize({ key: 'logStorage', comment: ['A developer only action to log the contents of the storage for the current window.'] }, "Log Storage Database Contents"), original: 'Log Storage Database Contents' },
+			title: localize2({ key: 'logStorage', comment: ['A developer only action to log the contents of the storage for the current window.'] }, "Log Storage Database Contents"),
 			category: Categories.Developer,
 			f1: true
 		});
 	}
 
 	run(accessor: ServicesAccessor): void {
-		accessor.get(IStorageService).log();
+		const storageService = accessor.get(IStorageService);
+		const dialogService = accessor.get(IDialogService);
+
+		storageService.log();
+
+		dialogService.info(localize('storageLogDialogMessage', "The storage database contents have been logged to the developer tools."), localize('storageLogDialogDetails', "Open developer tools from the menu and select the Console tab."));
 	}
 }
 
@@ -350,7 +423,7 @@ class LogWorkingCopiesAction extends Action2 {
 	constructor() {
 		super({
 			id: 'workbench.action.logWorkingCopies',
-			title: { value: localize({ key: 'logWorkingCopies', comment: ['A developer only action to log the working copies that exist.'] }, "Log Working Copies"), original: 'Log Working Copies' },
+			title: localize2({ key: 'logWorkingCopies', comment: ['A developer only action to log the working copies that exist.'] }, "Log Working Copies"),
 			category: Categories.Developer,
 			f1: true
 		});
@@ -360,6 +433,7 @@ class LogWorkingCopiesAction extends Action2 {
 		const workingCopyService = accessor.get(IWorkingCopyService);
 		const workingCopyBackupService = accessor.get(IWorkingCopyBackupService);
 		const logService = accessor.get(ILogService);
+		const outputService = accessor.get(IOutputService);
 
 		const backups = await workingCopyBackupService.getBackups();
 
@@ -377,6 +451,458 @@ class LogWorkingCopiesAction extends Action2 {
 		];
 
 		logService.info(msg.join('\n'));
+
+		outputService.showChannel(windowLogId, true);
+	}
+}
+
+class RemoveLargeStorageEntriesAction extends Action2 {
+
+	private static SIZE_THRESHOLD = 1024 * 16; // 16kb
+
+	constructor() {
+		super({
+			id: 'workbench.action.removeLargeStorageDatabaseEntries',
+			title: localize2('removeLargeStorageDatabaseEntries', 'Remove Large Storage Database Entries...'),
+			category: Categories.Developer,
+			f1: true
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const storageService = accessor.get(IStorageService);
+		const quickInputService = accessor.get(IQuickInputService);
+		const userDataProfileService = accessor.get(IUserDataProfileService);
+		const dialogService = accessor.get(IDialogService);
+		const environmentService = accessor.get(IEnvironmentService);
+
+		interface IStorageItem extends IQuickPickItem {
+			readonly key: string;
+			readonly scope: StorageScope;
+			readonly target: StorageTarget;
+			readonly size: number;
+		}
+
+		const items: IStorageItem[] = [];
+
+		for (const scope of [StorageScope.APPLICATION, StorageScope.PROFILE, StorageScope.WORKSPACE]) {
+			if (scope === StorageScope.PROFILE && userDataProfileService.currentProfile.isDefault) {
+				continue; // avoid duplicates
+			}
+
+			for (const target of [StorageTarget.MACHINE, StorageTarget.USER]) {
+				for (const key of storageService.keys(scope, target)) {
+					const value = storageService.get(key, scope);
+					if (value && (!environmentService.isBuilt /* show all keys in dev */ || value.length > RemoveLargeStorageEntriesAction.SIZE_THRESHOLD)) {
+						items.push({
+							key,
+							scope,
+							target,
+							size: value.length,
+							label: key,
+							description: ByteSize.formatSize(value.length),
+							detail: localize('largeStorageItemDetail', "Scope: {0}, Target: {1}", scope === StorageScope.APPLICATION ? localize('global', "Global") : scope === StorageScope.PROFILE ? localize('profile', "Profile") : localize('workspace', "Workspace"), target === StorageTarget.MACHINE ? localize('machine', "Machine") : localize('user', "User")),
+						});
+					}
+				}
+			}
+		}
+
+		items.sort((itemA, itemB) => itemB.size - itemA.size);
+
+		const selectedItems = await new Promise<readonly IStorageItem[]>(resolve => {
+			const disposables = new DisposableStore();
+
+			const picker = disposables.add(quickInputService.createQuickPick<IStorageItem>());
+			picker.items = items;
+			picker.canSelectMany = true;
+			picker.ok = false;
+			picker.customButton = true;
+			picker.hideCheckAll = true;
+			picker.customLabel = localize('removeLargeStorageEntriesPickerButton', "Remove");
+			picker.placeholder = localize('removeLargeStorageEntriesPickerPlaceholder', "Select large entries to remove from storage");
+
+			if (items.length === 0) {
+				picker.description = localize('removeLargeStorageEntriesPickerDescriptionNoEntries', "There are no large storage entries to remove.");
+			}
+
+			picker.show();
+
+			disposables.add(picker.onDidCustom(() => {
+				resolve(picker.selectedItems);
+				picker.hide();
+			}));
+
+			disposables.add(picker.onDidHide(() => disposables.dispose()));
+		});
+
+		if (selectedItems.length === 0) {
+			return;
+		}
+
+		const { confirmed } = await dialogService.confirm({
+			type: 'warning',
+			message: localize('removeLargeStorageEntriesConfirmRemove', "Do you want to remove the selected storage entries from the database?"),
+			detail: localize('removeLargeStorageEntriesConfirmRemoveDetail', "{0}\n\nThis action is irreversible and may result in data loss!", selectedItems.map(item => item.label).join('\n')),
+			primaryButton: localize({ key: 'removeLargeStorageEntriesButtonLabel', comment: ['&& denotes a mnemonic'] }, "&&Remove")
+		});
+
+		if (!confirmed) {
+			return;
+		}
+
+		const scopesToOptimize = new Set<StorageScope>();
+		for (const item of selectedItems) {
+			storageService.remove(item.key, item.scope);
+			scopesToOptimize.add(item.scope);
+		}
+
+		for (const scope of scopesToOptimize) {
+			await storageService.optimize(scope);
+		}
+	}
+}
+
+let tracker: DisposableTracker | undefined = undefined;
+let trackedDisposables = new Set<IDisposable>();
+
+const DisposablesSnapshotStateContext = new RawContextKey<'started' | 'pending' | 'stopped'>('dirtyWorkingCopies', 'stopped');
+
+class StartTrackDisposables extends Action2 {
+
+	constructor() {
+		super({
+			id: 'workbench.action.startTrackDisposables',
+			title: localize2('startTrackDisposables', 'Start Tracking Disposables'),
+			category: Categories.Developer,
+			f1: true,
+			precondition: ContextKeyExpr.and(DisposablesSnapshotStateContext.isEqualTo('pending').negate(), DisposablesSnapshotStateContext.isEqualTo('started').negate())
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		const disposablesSnapshotStateContext = DisposablesSnapshotStateContext.bindTo(accessor.get(IContextKeyService));
+		disposablesSnapshotStateContext.set('started');
+
+		trackedDisposables.clear();
+
+		tracker = new DisposableTracker();
+		setDisposableTracker(tracker);
+	}
+}
+
+class SnapshotTrackedDisposables extends Action2 {
+
+	constructor() {
+		super({
+			id: 'workbench.action.snapshotTrackedDisposables',
+			title: localize2('snapshotTrackedDisposables', 'Snapshot Tracked Disposables'),
+			category: Categories.Developer,
+			f1: true,
+			precondition: DisposablesSnapshotStateContext.isEqualTo('started')
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		const disposablesSnapshotStateContext = DisposablesSnapshotStateContext.bindTo(accessor.get(IContextKeyService));
+		disposablesSnapshotStateContext.set('pending');
+
+		trackedDisposables = new Set(tracker?.computeLeakingDisposables(1000)?.leaks.map(disposable => disposable.value));
+	}
+}
+
+class StopTrackDisposables extends Action2 {
+
+	constructor() {
+		super({
+			id: 'workbench.action.stopTrackDisposables',
+			title: localize2('stopTrackDisposables', 'Stop Tracking Disposables'),
+			category: Categories.Developer,
+			f1: true,
+			precondition: DisposablesSnapshotStateContext.isEqualTo('pending')
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		const editorService = accessor.get(IEditorService);
+
+		const disposablesSnapshotStateContext = DisposablesSnapshotStateContext.bindTo(accessor.get(IContextKeyService));
+		disposablesSnapshotStateContext.set('stopped');
+
+		if (tracker) {
+			const disposableLeaks = new Set<DisposableInfo>();
+
+			for (const disposable of new Set(tracker.computeLeakingDisposables(1000)?.leaks) ?? []) {
+				if (trackedDisposables.has(disposable.value)) {
+					disposableLeaks.add(disposable);
+				}
+			}
+
+			const leaks = tracker.computeLeakingDisposables(1000, Array.from(disposableLeaks));
+			if (leaks) {
+				editorService.openEditor({ resource: undefined, contents: leaks.details });
+			}
+		}
+
+		setDisposableTracker(null);
+		tracker = undefined;
+		trackedDisposables.clear();
+	}
+}
+
+class PolicyDiagnosticsAction extends Action2 {
+
+	constructor() {
+		super({
+			id: 'workbench.action.showPolicyDiagnostics',
+			title: localize2('policyDiagnostics', 'Policy Diagnostics'),
+			category: Categories.Developer,
+			f1: true
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(IEditorService);
+		const configurationService = accessor.get(IConfigurationService);
+		const productService = accessor.get(IProductService);
+		const defaultAccountService = accessor.get(IDefaultAccountService);
+		const authenticationService = accessor.get(IAuthenticationService);
+		const authenticationAccessService = accessor.get(IAuthenticationAccessService);
+		const policyService = accessor.get(IPolicyService);
+
+		const configurationRegistry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration);
+
+		let content = '# VS Code Policy Diagnostics\n\n';
+		content += '*WARNING: This file may contain sensitive information.*\n\n';
+		content += '## System Information\n\n';
+		content += '| Property | Value |\n';
+		content += '|----------|-------|\n';
+		content += `| Generated | ${new Date().toISOString()} |\n`;
+		content += `| Product | ${productService.nameLong} ${productService.version} |\n`;
+		content += `| Commit | ${productService.commit || 'n/a'} |\n\n`;
+
+		// Account information
+		content += '## Account Information\n\n';
+		try {
+			const account = await defaultAccountService.getDefaultAccount();
+			const sensitiveKeys = ['sessionId', 'analytics_tracking_id'];
+			if (account) {
+				// Try to get username/display info from the authentication session
+				let username = 'Unknown';
+				let accountLabel = 'Unknown';
+				try {
+					const providerIds = authenticationService.getProviderIds();
+					for (const providerId of providerIds) {
+						const sessions = await authenticationService.getSessions(providerId);
+						const matchingSession = sessions.find(session => session.id === account.sessionId);
+						if (matchingSession) {
+							username = matchingSession.account.id;
+							accountLabel = matchingSession.account.label;
+							break;
+						}
+					}
+				} catch (error) {
+					// Fallback to just session info
+				}
+
+				content += '### Default Account Summary\n\n';
+				content += `**Account ID/Username**: ${username}\n\n`;
+				content += `**Account Label**: ${accountLabel}\n\n`;
+
+				content += '### Detailed Account Properties\n\n';
+				content += '| Property | Value |\n';
+				content += '|----------|-------|\n';
+
+				// Iterate through all properties of the account object
+				for (const [key, value] of Object.entries(account)) {
+					if (value !== undefined && value !== null) {
+						let displayValue: string;
+
+						// Mask sensitive information
+						if (sensitiveKeys.includes(key)) {
+							displayValue = '***';
+						} else if (typeof value === 'object') {
+							displayValue = JSON.stringify(value);
+						} else {
+							displayValue = String(value);
+						}
+
+						content += `| ${key} | ${displayValue} |\n`;
+					}
+				}
+				content += '\n';
+			} else {
+				content += '*No default account configured*\n\n';
+			}
+		} catch (error) {
+			content += `*Error retrieving account information: ${error}*\n\n`;
+		}
+
+		content += '## Policy-Controlled Settings\n\n';
+
+		const policyConfigurations = configurationRegistry.getPolicyConfigurations();
+		const configurationProperties = configurationRegistry.getConfigurationProperties();
+		const excludedProperties = configurationRegistry.getExcludedConfigurationProperties();
+
+		if (policyConfigurations.size > 0) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const appliedPolicy: Array<{ name: string; key: string; property: any; inspection: any }> = [];
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const notAppliedPolicy: Array<{ name: string; key: string; property: any; inspection: any }> = [];
+
+			for (const [policyName, settingKey] of policyConfigurations) {
+				const property = configurationProperties[settingKey] ?? excludedProperties[settingKey];
+				if (property) {
+					const inspectValue = configurationService.inspect(settingKey);
+					const settingInfo = {
+						name: policyName,
+						key: settingKey,
+						property,
+						inspection: inspectValue
+					};
+
+					if (inspectValue.policyValue !== undefined) {
+						appliedPolicy.push(settingInfo);
+					} else {
+						notAppliedPolicy.push(settingInfo);
+					}
+				}
+			}
+
+			// Try to detect where the policy came from
+			const policySourceMemo = new Map<string, string>();
+			const getPolicySource = (policyName: string): string => {
+				if (policySourceMemo.has(policyName)) {
+					return policySourceMemo.get(policyName)!;
+				}
+				try {
+					const policyServiceConstructorName = policyService.constructor.name;
+					if (policyServiceConstructorName === 'MultiplexPolicyService') {
+						// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
+						const multiplexService = policyService as any;
+						if (multiplexService.policyServices) {
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
+							const componentServices = multiplexService.policyServices as ReadonlyArray<any>;
+							for (const service of componentServices) {
+								if (service.getPolicyValue && service.getPolicyValue(policyName) !== undefined) {
+									policySourceMemo.set(policyName, service.constructor.name);
+									return service.constructor.name;
+								}
+							}
+						}
+					}
+					return '';
+				} catch {
+					return 'Unknown';
+				}
+			};
+
+			content += '### Applied Policy\n\n';
+			appliedPolicy.sort((a, b) => getPolicySource(a.name).localeCompare(getPolicySource(b.name)) || a.name.localeCompare(b.name));
+			if (appliedPolicy.length > 0) {
+				content += '| Setting Key | Policy Name | Policy Source | Default Value | Current Value | Policy Value |\n';
+				content += '|-------------|-------------|---------------|---------------|---------------|-------------|\n';
+
+				for (const setting of appliedPolicy) {
+					const defaultValue = JSON.stringify(setting.property.default);
+					const currentValue = JSON.stringify(setting.inspection.value);
+					const policyValue = JSON.stringify(setting.inspection.policyValue);
+					const policySource = getPolicySource(setting.name);
+
+					content += `| ${setting.key} | ${setting.name} | ${policySource} | \`${defaultValue}\` | \`${currentValue}\` | \`${policyValue}\` |\n`;
+				}
+				content += '\n';
+			} else {
+				content += '*No settings are currently controlled by policies*\n\n';
+			}
+
+			content += '###  Non-applied Policy\n\n';
+			if (notAppliedPolicy.length > 0) {
+				content += '| Setting Key | Policy Name  \n';
+				content += '|-------------|-------------|\n';
+
+				for (const setting of notAppliedPolicy) {
+
+					content += `| ${setting.key} | ${setting.name}|\n`;
+				}
+				content += '\n';
+			} else {
+				content += '*All policy-controllable settings are currently being enforced*\n\n';
+			}
+		} else {
+			content += '*No policy-controlled settings found*\n\n';
+		}
+
+		// Authentication diagnostics
+		content += '## Authentication Information\n\n';
+		try {
+			const providerIds = authenticationService.getProviderIds();
+
+			if (providerIds.length > 0) {
+				content += '### Authentication Providers\n\n';
+				content += '| Provider ID | Sessions | Accounts |\n';
+				content += '|-------------|----------|----------|\n';
+
+				for (const providerId of providerIds) {
+					try {
+						const sessions = await authenticationService.getSessions(providerId);
+						const accounts = sessions.map(session => session.account);
+						const uniqueAccounts = Array.from(new Set(accounts.map(account => account.label)));
+
+						content += `| ${providerId} | ${sessions.length} | ${uniqueAccounts.join(', ') || 'None'} |\n`;
+					} catch (error) {
+						content += `| ${providerId} | Error | ${error} |\n`;
+					}
+				}
+				content += '\n';
+
+				// Detailed session information
+				content += '### Detailed Session Information\n\n';
+				for (const providerId of providerIds) {
+					try {
+						const sessions = await authenticationService.getSessions(providerId);
+
+						if (sessions.length > 0) {
+							content += `#### ${providerId}\n\n`;
+							content += '| Account | Scopes | Extensions with Access |\n';
+							content += '|---------|--------|------------------------|\n';
+
+							for (const session of sessions) {
+								const accountName = session.account.label;
+								const scopes = session.scopes.join(', ') || 'Default';
+
+								// Get extensions with access to this account
+								try {
+									const allowedExtensions = authenticationAccessService.readAllowedExtensions(providerId, accountName);
+									const extensionNames = allowedExtensions
+										.filter(ext => ext.allowed !== false)
+										.map(ext => `${ext.name}${ext.trusted ? ' (trusted)' : ''}`)
+										.join(', ') || 'None';
+
+									content += `| ${accountName} | ${scopes} | ${extensionNames} |\n`;
+								} catch (error) {
+									content += `| ${accountName} | ${scopes} | Error: ${error} |\n`;
+								}
+							}
+							content += '\n';
+						}
+					} catch (error) {
+						content += `#### ${providerId}\n*Error retrieving sessions: ${error}*\n\n`;
+					}
+				}
+			} else {
+				content += '*No authentication providers found*\n\n';
+			}
+		} catch (error) {
+			content += `*Error retrieving authentication information: ${error}*\n\n`;
+		}
+
+		await editorService.openEditor({
+			resource: undefined,
+			contents: content,
+			languageId: 'markdown',
+			options: { pinned: true, }
+		});
 	}
 }
 
@@ -385,6 +911,13 @@ registerAction2(InspectContextKeysAction);
 registerAction2(ToggleScreencastModeAction);
 registerAction2(LogStorageAction);
 registerAction2(LogWorkingCopiesAction);
+registerAction2(RemoveLargeStorageEntriesAction);
+registerAction2(PolicyDiagnosticsAction);
+if (!product.commit) {
+	registerAction2(StartTrackDisposables);
+	registerAction2(SnapshotTrackedDisposables);
+	registerAction2(StopTrackDisposables);
+}
 
 // --- Configuration
 
@@ -410,27 +943,44 @@ configurationRegistry.registerConfiguration({
 			maximum: 100,
 			description: localize('screencastMode.fontSize', "Controls the font size (in pixels) of the screencast mode keyboard.")
 		},
-		'screencastMode.keyboardShortcutsFormat': {
-			enum: ['keys', 'command', 'commandWithGroup', 'commandAndKeys', 'commandWithGroupAndKeys'],
-			enumDescriptions: [
-				localize('keyboardShortcutsFormat.keys', "Keys."),
-				localize('keyboardShortcutsFormat.command', "Command title."),
-				localize('keyboardShortcutsFormat.commandWithGroup', "Command title prefixed by its group."),
-				localize('keyboardShortcutsFormat.commandAndKeys', "Command title and keys."),
-				localize('keyboardShortcutsFormat.commandWithGroupAndKeys', "Command title and keys, with the command prefixed by its group.")
-			],
-			description: localize('screencastMode.keyboardShortcutsFormat', "Controls what is displayed in the keyboard overlay when showing shortcuts."),
-			default: 'commandAndKeys'
-		},
-		'screencastMode.onlyKeyboardShortcuts': {
-			type: 'boolean',
-			description: localize('screencastMode.onlyKeyboardShortcuts', "Show only keyboard shortcuts in screencast mode (do not include action names)."),
-			default: false
-		},
-		'screencastMode.hideSingleEditorCursorMoves': {
-			type: 'boolean',
-			description: localize('screencastMode.hideSingleEditorCursorMoves', "Hide the single editor cursor move commands in screencast mode."),
-			default: false
+		'screencastMode.keyboardOptions': {
+			type: 'object',
+			description: localize('screencastMode.keyboardOptions.description', "Options for customizing the keyboard overlay in screencast mode."),
+			properties: {
+				'showKeys': {
+					type: 'boolean',
+					default: true,
+					description: localize('screencastMode.keyboardOptions.showKeys', "Show raw keys.")
+				},
+				'showKeybindings': {
+					type: 'boolean',
+					default: true,
+					description: localize('screencastMode.keyboardOptions.showKeybindings', "Show keyboard shortcuts.")
+				},
+				'showCommands': {
+					type: 'boolean',
+					default: true,
+					description: localize('screencastMode.keyboardOptions.showCommands', "Show command names.")
+				},
+				'showCommandGroups': {
+					type: 'boolean',
+					default: false,
+					description: localize('screencastMode.keyboardOptions.showCommandGroups', "Show command group names, when commands are also shown.")
+				},
+				'showSingleEditorCursorMoves': {
+					type: 'boolean',
+					default: true,
+					description: localize('screencastMode.keyboardOptions.showSingleEditorCursorMoves', "Show single editor cursor move commands.")
+				}
+			},
+			default: {
+				'showKeys': true,
+				'showKeybindings': true,
+				'showCommands': true,
+				'showCommandGroups': false,
+				'showSingleEditorCursorMoves': true
+			},
+			additionalProperties: false
 		},
 		'screencastMode.keyboardOverlayTimeout': {
 			type: 'number',

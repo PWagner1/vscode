@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as assert from 'assert';
-import { URI } from 'vs/base/common/uri';
-import { IMarker, MarkerSeverity, IRelatedInformation } from 'vs/platform/markers/common/markers';
-import { MarkersModel, Marker, ResourceMarkers, RelatedInformation } from 'vs/workbench/contrib/markers/browser/markersModel';
-import { groupBy } from 'vs/base/common/collections';
+import assert from 'assert';
+import { URI } from '../../../../../base/common/uri.js';
+import { IMarker, MarkerSeverity, IRelatedInformation } from '../../../../../platform/markers/common/markers.js';
+import { MarkersModel, Marker, ResourceMarkers, RelatedInformation } from '../../browser/markersModel.js';
+import { groupBy } from '../../../../../base/common/collections.js';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
 
 class TestMarkersModel extends MarkersModel {
 
@@ -18,14 +19,18 @@ class TestMarkersModel extends MarkersModel {
 
 		Object.keys(byResource).forEach(key => {
 			const markers = byResource[key];
-			const resource = markers[0].resource;
+			if (markers) {
+				const resource = markers[0].resource;
 
-			this.setResourceMarkers([[resource, markers]]);
+				this.setResourceMarkers([[resource, markers]]);
+			}
 		});
 	}
 }
 
 suite('MarkersModel Test', () => {
+
+	ensureNoDisposablesAreLeakedInTestSuite();
 
 	test('marker ids are unique', function () {
 		const marker1 = anErrorWithRange(3);
@@ -137,6 +142,7 @@ suite('MarkersModel Test', () => {
 		const testObject = new Marker('5', marker, null!);
 
 		// hack
+		// eslint-disable-next-line local/code-no-any-casts
 		(testObject as any).relatedInformation = marker.relatedInformation!.map(r => new RelatedInformation('6', marker, r));
 		assert.strictEqual(JSON.stringify({ ...marker, resource: marker.resource.path, relatedInformation: marker.relatedInformation!.map(r => ({ ...r, resource: r.resource.path })) }, null, '\t'), testObject.toString());
 	});

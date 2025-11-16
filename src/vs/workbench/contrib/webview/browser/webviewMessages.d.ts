@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { IMouseWheelEvent } from 'vs/base/browser/mouseEvent';
-import type { WebviewStyles } from 'vs/workbench/contrib/webview/browser/webview';
+import type { IMouseWheelEvent } from '../../../../base/browser/mouseEvent.js';
+import type { WebviewStyles } from './webview.js';
 
 type KeyEvent = {
 	key: string;
@@ -15,6 +15,10 @@ type KeyEvent = {
 	ctrlKey: boolean;
 	metaKey: boolean;
 	repeat: boolean;
+}
+
+type WebViewDragEvent = {
+	shiftKey: boolean;
 }
 
 export type FromWebviewMessage = {
@@ -36,6 +40,8 @@ export type FromWebviewMessage = {
 	'did-keyup': KeyEvent;
 	'did-context-menu': { clientX: number; clientY: number; context: { [key: string]: unknown } };
 	'drag-start': void;
+	'drag': WebViewDragEvent;
+	'updated-intrinsic-content-size': { width: number; height: number };
 };
 
 interface UpdateContentEvent {
@@ -66,6 +72,7 @@ export type ToWebviewMessage = {
 		location: string | undefined;
 	};
 	'set-confirm-before-close': string;
+	'set-context-menu-visible': { visible: boolean };
 	'initial-scroll-position': number;
 	'content': UpdateContentEvent;
 	'set-title': string | undefined;

@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+// @ts-check
 
 /**
  * Hygiene works by creating cascading subsets of all our files and
@@ -24,19 +25,22 @@ module.exports.all = [
 	'test/**/*',
 	'!cli/**/*',
 	'!out*/**',
+	'!extensions/**/out*/**',
 	'!test/**/out/**',
 	'!**/node_modules/**',
+	'!**/*.js.map',
 ];
 
 module.exports.unicodeFilter = [
 	'**',
 
 	'!**/ThirdPartyNotices.txt',
+	'!**/ThirdPartyNotices.cli.txt',
 	'!**/LICENSE.{txt,rtf}',
 	'!LICENSES.chromium.html',
 	'!**/LICENSE',
 
-	'!**/*.{dll,exe,png,bmp,jpg,scpt,cur,ttf,woff,eot,template,ico,icns,opus}',
+	'!**/*.{dll,exe,png,bmp,jpg,scpt,cur,ttf,woff,eot,template,ico,icns,opus,wasm}',
 	'!**/test/**',
 	'!**/*.test.ts',
 	'!**/*.{d.ts,json,md}',
@@ -45,9 +49,11 @@ module.exports.unicodeFilter = [
 	'!build/win32/**',
 	'!extensions/markdown-language-features/notebook-out/*.js',
 	'!extensions/markdown-math/notebook-out/**',
+	'!extensions/mermaid-chat-features/chat-webview-out/**',
 	'!extensions/ipynb/notebook-out/**',
 	'!extensions/notebook-renderers/renderer-out/**',
 	'!extensions/php-language-features/src/features/phpGlobalFunctions.ts',
+	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/test-workspace/**',
 	'!extensions/vscode-api-tests/testWorkspace/**',
 	'!extensions/vscode-api-tests/testWorkspace2/**',
@@ -55,9 +61,11 @@ module.exports.unicodeFilter = [
 	'!extensions/**/out/**',
 	'!extensions/**/snippets/**',
 	'!extensions/**/colorize-fixtures/**',
+	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 
 	'!src/vs/base/browser/dompurify/**',
 	'!src/vs/workbench/services/keybinding/browser/keyboardLayouts/**',
+	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
 ];
 
 module.exports.indentationFilter = [
@@ -65,6 +73,7 @@ module.exports.indentationFilter = [
 
 	// except specific files
 	'!**/ThirdPartyNotices.txt',
+	'!**/ThirdPartyNotices.cli.txt',
 	'!**/LICENSE.{txt,rtf}',
 	'!LICENSES.chromium.html',
 	'!**/LICENSE',
@@ -75,27 +84,36 @@ module.exports.indentationFilter = [
 	'!src/vs/base/common/semver/semver.js',
 	'!src/vs/base/node/terminateProcess.sh',
 	'!src/vs/base/node/cpuUsage.sh',
+	'!src/vs/editor/common/languages/highlights/*.scm',
+	'!src/vs/editor/common/languages/injections/*.scm',
 	'!test/unit/assert.js',
 	'!resources/linux/snap/electron-launch',
 	'!build/ext.js',
+	'!build/npm/gyp/patches/gyp_spectre_mitigation_support.patch',
+	'!product.overrides.json',
 
 	// except specific folders
 	'!test/automation/out/**',
 	'!test/monaco/out/**',
 	'!test/smoke/out/**',
+	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
+	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
+	'!extensions/terminal-suggest/src/completions/upstream/**',
 	'!extensions/typescript-language-features/test-workspace/**',
 	'!extensions/typescript-language-features/resources/walkthroughs/**',
+	'!extensions/typescript-language-features/package-manager/node-maintainer/**',
 	'!extensions/markdown-math/notebook-out/**',
 	'!extensions/ipynb/notebook-out/**',
 	'!extensions/vscode-api-tests/testWorkspace/**',
 	'!extensions/vscode-api-tests/testWorkspace2/**',
 	'!build/monaco/**',
 	'!build/win32/**',
+	'!build/checker/**',
+	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
 
 	// except multiple specific files
 	'!**/package.json',
-	'!**/yarn.lock',
-	'!**/yarn-error.log',
+	'!**/package-lock.json',
 
 	// except multiple specific folders
 	'!**/codicon/**',
@@ -112,17 +130,19 @@ module.exports.indentationFilter = [
 	'!src/vs/*/**/*.d.ts',
 	'!src/typings/**/*.d.ts',
 	'!extensions/**/*.d.ts',
-	'!**/*.{svg,exe,png,bmp,jpg,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,template,yaml,yml,d.ts.recipe,ico,icns,plist,opus,admx,adml}',
+	'!**/*.{svg,exe,png,bmp,jpg,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,psm1,template,yaml,yml,d.ts.recipe,ico,icns,plist,opus,admx,adml,wasm}',
 	'!build/{lib,download,linux,darwin}/**/*.js',
 	'!build/**/*.sh',
 	'!build/azure-pipelines/**/*.js',
 	'!build/azure-pipelines/**/*.config',
+	'!build/npm/gyp/custom-headers/*.patch',
 	'!**/Dockerfile',
 	'!**/Dockerfile.*',
 	'!**/*.Dockerfile',
 	'!**/*.dockerfile',
 
 	// except for built files
+	'!extensions/mermaid-chat-features/chat-webview-out/*.js',
 	'!extensions/markdown-language-features/media/*.js',
 	'!extensions/markdown-language-features/notebook-out/*.js',
 	'!extensions/markdown-math/notebook-out/*.js',
@@ -154,8 +174,10 @@ module.exports.copyrightFilter = [
 	'!**/*.disabled',
 	'!**/*.code-workspace',
 	'!**/*.js.map',
+	'!**/*.wasm',
 	'!build/**/*.init',
 	'!build/linux/libcxx-fetcher.*',
+	'!build/npm/gyp/custom-headers/*.patch',
 	'!resources/linux/snap/snapcraft.yaml',
 	'!resources/win32/bin/code.js',
 	'!resources/completions/**',
@@ -163,9 +185,12 @@ module.exports.copyrightFilter = [
 	'!extensions/markdown-language-features/media/highlight.css',
 	'!extensions/markdown-math/notebook-out/**',
 	'!extensions/ipynb/notebook-out/**',
+	'!extensions/simple-browser/media/codicon.css',
+	'!extensions/terminal-suggest/src/completions/upstream/**',
+	'!extensions/typescript-language-features/node-maintainer/**',
 	'!extensions/html-language-features/server/src/modes/typescript/*',
 	'!extensions/*/server/bin/*',
-	'!src/vs/editor/test/node/classification/typescript-test.ts',
+	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
 ];
 
 module.exports.tsFormattingFilter = [
@@ -183,16 +208,21 @@ module.exports.tsFormattingFilter = [
 	'!extensions/vscode-api-tests/testWorkspace2/**',
 	'!extensions/**/*.test.ts',
 	'!extensions/html-language-features/server/lib/jquery.d.ts',
+	'!extensions/terminal-suggest/src/shell/zshBuiltinsCache.ts',
+	'!extensions/terminal-suggest/src/shell/fishBuiltinsCache.ts',
 ];
 
 module.exports.eslintFilter = [
 	'**/*.js',
+	'**/*.cjs',
+	'**/*.mjs',
 	'**/*.ts',
-	...readFileSync(join(__dirname, '../.eslintignore'))
-		.toString().split(/\r\n|\n/)
-		.filter(line => !line.startsWith('#'))
-		.filter(line => !!line)
-		.map(line => `!${line}`)
+	'.eslint-plugin-local/**/*.ts',
+	...readFileSync(join(__dirname, '..', '.eslint-ignore'))
+		.toString()
+		.split(/\r\n|\n/)
+		.filter(line => line && !line.startsWith('#'))
+		.map(line => line.startsWith('!') ? line.slice(1) : `!${line}`)
 ];
 
 module.exports.stylelintFilter = [

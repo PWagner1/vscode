@@ -3,17 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Schemas } from 'vs/base/common/network';
-import { IConfigurationService } from 'vs/platform/configuration/common/configuration';
-import { ExtensionKind } from 'vs/platform/environment/common/environment';
-import { ExtensionIdentifier, ExtensionIdentifierMap, IExtensionDescription } from 'vs/platform/extensions/common/extensions';
-import { ILogService } from 'vs/platform/log/common/log';
-import { IWorkbenchEnvironmentService } from 'vs/workbench/services/environment/common/environmentService';
-import { IReadOnlyExtensionDescriptionRegistry } from 'vs/workbench/services/extensions/common/extensionDescriptionRegistry';
-import { ExtensionHostKind, ExtensionRunningPreference, IExtensionHostKindPicker, determineExtensionHostKinds } from 'vs/workbench/services/extensions/common/extensionHostKind';
-import { IExtensionHostManager } from 'vs/workbench/services/extensions/common/extensionHostManager';
-import { IExtensionManifestPropertiesService } from 'vs/workbench/services/extensions/common/extensionManifestPropertiesService';
-import { ExtensionRunningLocation, LocalProcessRunningLocation, LocalWebWorkerRunningLocation, RemoteRunningLocation } from 'vs/workbench/services/extensions/common/extensionRunningLocation';
+import { Schemas } from '../../../../base/common/network.js';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
+import { ExtensionKind } from '../../../../platform/environment/common/environment.js';
+import { ExtensionIdentifier, ExtensionIdentifierMap, IExtensionDescription } from '../../../../platform/extensions/common/extensions.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
+import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
+import { IReadOnlyExtensionDescriptionRegistry } from './extensionDescriptionRegistry.js';
+import { ExtensionHostKind, ExtensionRunningPreference, IExtensionHostKindPicker, determineExtensionHostKinds } from './extensionHostKind.js';
+import { IExtensionHostManager } from './extensionHostManagers.js';
+import { IExtensionManifestPropertiesService } from './extensionManifestPropertiesService.js';
+import { ExtensionRunningLocation, LocalProcessRunningLocation, LocalWebWorkerRunningLocation, RemoteRunningLocation } from './extensionRunningLocation.js';
 
 export class ExtensionRunningLocationTracker {
 
@@ -37,6 +37,10 @@ export class ExtensionRunningLocationTracker {
 		@ILogService private readonly _logService: ILogService,
 		@IExtensionManifestPropertiesService private readonly _extensionManifestPropertiesService: IExtensionManifestPropertiesService,
 	) { }
+
+	public set(extensionId: ExtensionIdentifier, runningLocation: ExtensionRunningLocation) {
+		this._runningLocation.set(extensionId, runningLocation);
+	}
 
 	public readExtensionKinds(extensionDescription: IExtensionDescription): ExtensionKind[] {
 		if (extensionDescription.isUnderDevelopment && this._environmentService.extensionDevelopmentKind) {
@@ -196,10 +200,14 @@ export class ExtensionRunningLocationTracker {
 	}
 
 	public computeRunningLocation(localExtensions: IExtensionDescription[], remoteExtensions: IExtensionDescription[], isInitialAllocation: boolean): ExtensionIdentifierMap<ExtensionRunningLocation | null> {
-		return this._doComputeRunningLocation(localExtensions, remoteExtensions, isInitialAllocation).runningLocation;
+		return this._doComputeRunningLocation(this._runningLocation, localExtensions, remoteExtensions, isInitialAllocation).runningLocation;
 	}
 
-	private _doComputeRunningLocation(localExtensions: IExtensionDescription[], remoteExtensions: IExtensionDescription[], isInitialAllocation: boolean): { runningLocation: ExtensionIdentifierMap<ExtensionRunningLocation | null>; maxLocalProcessAffinity: number; maxLocalWebWorkerAffinity: number } {
+	private _doComputeRunningLocation(existingRunningLocation: ExtensionIdentifierMap<ExtensionRunningLocation | null>, localExtensions: IExtensionDescription[], remoteExtensions: IExtensionDescription[], isInitialAllocation: boolean): { runningLocation: ExtensionIdentifierMap<ExtensionRunningLocation | null>; maxLocalProcessAffinity: number; maxLocalWebWorkerAffinity: number } {
+		// Skip extensions that have an existing running location
+		localExtensions = localExtensions.filter(extension => !existingRunningLocation.has(extension.identifier));
+		remoteExtensions = remoteExtensions.filter(extension => !existingRunningLocation.has(extension.identifier));
+
 		const extensionHostKinds = determineExtensionHostKinds(
 			localExtensions,
 			remoteExtensions,
@@ -247,11 +255,18 @@ export class ExtensionRunningLocationTracker {
 			result.set(extension.identifier, new LocalWebWorkerRunningLocation(affinity));
 		}
 
+		// Add extensions that already have an existing running location
+		for (const [extensionIdKey, runningLocation] of existingRunningLocation) {
+			if (runningLocation) {
+				result.set(extensionIdKey, runningLocation);
+			}
+		}
+
 		return { runningLocation: result, maxLocalProcessAffinity: maxAffinity, maxLocalWebWorkerAffinity: maxLocalWebWorkerAffinity };
 	}
 
 	public initializeRunningLocation(localExtensions: IExtensionDescription[], remoteExtensions: IExtensionDescription[]): void {
-		const { runningLocation, maxLocalProcessAffinity, maxLocalWebWorkerAffinity } = this._doComputeRunningLocation(localExtensions, remoteExtensions, true);
+		const { runningLocation, maxLocalProcessAffinity, maxLocalWebWorkerAffinity } = this._doComputeRunningLocation(this._runningLocation, localExtensions, remoteExtensions, true);
 		this._runningLocation = runningLocation;
 		this._maxLocalProcessAffinity = maxLocalProcessAffinity;
 		this._maxLocalWebWorkerAffinity = maxLocalWebWorkerAffinity;

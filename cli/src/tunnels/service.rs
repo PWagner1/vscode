@@ -41,6 +41,9 @@ pub trait ServiceManager {
 	/// Show logs from the running service to standard out.
 	async fn show_logs(&self) -> Result<(), AnyError>;
 
+	/// Gets whether the tunnel service is installed.
+	async fn is_installed(&self) -> Result<bool, AnyError>;
+
 	/// Unregisters the current executable as a service.
 	async fn unregister(&self) -> Result<(), AnyError>;
 }
@@ -82,7 +85,7 @@ pub(crate) async fn tail_log_file(log_file: &Path) -> Result<(), AnyError> {
 	let mut rx = tailf(file, 20);
 	while let Some(line) = rx.recv().await {
 		match line {
-			TailEvent::Line(l) => print!("{}", l),
+			TailEvent::Line(l) => print!("{l}"),
 			TailEvent::Reset => println!("== Tunnel service restarted =="),
 			TailEvent::Err(e) => return Err(wrap(e, "error reading log file").into()),
 		}
