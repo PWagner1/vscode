@@ -20,11 +20,11 @@ import { IContextViewService, IContextMenuService, IOpenContextView } from '../.
 import { IContextKeyService, IContextKey, ContextKeyExpr, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { MenuItemAction, IMenuService, registerAction2, MenuId, MenuRegistry, Action2, IMenu } from '../../../../platform/actions/common/actions.js';
+import { MenuItemAction, IMenuService, registerAction2, MenuId, IAction2Options, MenuRegistry, Action2, IMenu } from '../../../../platform/actions/common/actions.js';
 import { IAction, ActionRunner, Action, Separator, IActionRunner, toAction } from '../../../../base/common/actions.js';
 import { ActionBar, IActionViewItemProvider } from '../../../../base/browser/ui/actionbar/actionbar.js';
 import { IThemeService, IFileIconTheme } from '../../../../platform/theme/common/themeService.js';
-import { isSCMResource, isSCMResourceGroup, isSCMRepository, isSCMInput, collectContextMenuActions, getActionViewItemProvider, isSCMActionButton, isSCMViewService, isSCMResourceNode, connectPrimaryMenu, addClassToTwistieElement } from './util.js';
+import { isSCMResource, isSCMResourceGroup, isSCMRepository, isSCMInput, collectContextMenuActions, getActionViewItemProvider, isSCMActionButton, isSCMViewService, isSCMResourceNode, connectPrimaryMenu } from './util.js';
 import { WorkbenchCompressibleAsyncDataTree, IOpenEvent } from '../../../../platform/list/browser/listService.js';
 import { IConfigurationService, ConfigurationTarget } from '../../../../platform/configuration/common/configuration.js';
 import { disposableTimeout, Sequencer, ThrottledDelayer, Throttler } from '../../../../base/common/async.js';
@@ -191,9 +191,6 @@ export class ActionButtonRenderer implements ICompressibleTreeRenderer<ISCMActio
 	) { }
 
 	renderTemplate(container: HTMLElement): ActionButtonTemplate {
-		// HACK - use helper function as there is no tree API
-		addClassToTwistieElement(container, 'force-no-twistie');
-
 		// Use default cursor & disable hover for list item
 		container.parentElement!.parentElement!.classList.add('cursor-default', 'force-no-hover');
 
@@ -315,9 +312,6 @@ class InputRenderer implements ICompressibleTreeRenderer<ISCMInput, FuzzyScore, 
 	) { }
 
 	renderTemplate(container: HTMLElement): InputTemplate {
-		// HACK - use helper function as there is no tree API
-		addClassToTwistieElement(container, 'force-no-twistie');
-
 		// Disable hover for list item
 		container.parentElement!.parentElement!.classList.add('force-no-hover');
 
@@ -447,9 +441,6 @@ class ResourceGroupRenderer implements ICompressibleTreeRenderer<ISCMResourceGro
 	) { }
 
 	renderTemplate(container: HTMLElement): ResourceGroupTemplate {
-		// HACK - use helper function as there is no tree API
-		addClassToTwistieElement(container, 'force-twistie');
-
 		const element = append(container, $('.resource-group'));
 		const name = append(element, $('.name'));
 		const actionsContainer = append(element, $('.actions'));
@@ -1117,15 +1108,17 @@ class RepositoryVisibilityActionController {
 }
 
 class SetListViewModeAction extends ViewAction<SCMViewPane> {
-	constructor() {
+	constructor(
+		id = 'workbench.scm.action.setListViewMode',
+		menu: Partial<IAction2Options['menu']> = {}) {
 		super({
-			id: 'workbench.scm.action.setListViewMode',
+			id,
 			title: localize('setListViewMode', "View as List"),
 			viewId: VIEW_PANE_ID,
 			f1: false,
 			icon: Codicon.listTree,
 			toggled: ContextKeys.SCMViewMode.isEqualTo(ViewMode.List),
-			menu: { id: Menus.ViewSort, group: '1_viewmode' }
+			menu: { id: Menus.ViewSort, group: '1_viewmode', ...menu }
 		});
 	}
 
@@ -1134,17 +1127,33 @@ class SetListViewModeAction extends ViewAction<SCMViewPane> {
 	}
 }
 
-class SetTreeViewModeAction extends ViewAction<SCMViewPane> {
+class SetListViewModeNavigationAction extends SetListViewModeAction {
 	constructor() {
 		super(
+			'workbench.scm.action.setListViewModeNavigation',
 			{
-				id: 'workbench.scm.action.setTreeViewMode',
+				id: MenuId.SCMTitle,
+				when: ContextKeyExpr.and(ContextKeyExpr.equals('view', VIEW_PANE_ID), ContextKeys.RepositoryCount.notEqualsTo(0), ContextKeys.SCMViewMode.isEqualTo(ViewMode.Tree)),
+				group: 'navigation',
+				isHiddenByDefault: true,
+				order: -1000
+			});
+	}
+}
+
+class SetTreeViewModeAction extends ViewAction<SCMViewPane> {
+	constructor(
+		id = 'workbench.scm.action.setTreeViewMode',
+		menu: Partial<IAction2Options['menu']> = {}) {
+		super(
+			{
+				id,
 				title: localize('setTreeViewMode', "View as Tree"),
 				viewId: VIEW_PANE_ID,
 				f1: false,
 				icon: Codicon.listFlat,
 				toggled: ContextKeys.SCMViewMode.isEqualTo(ViewMode.Tree),
-				menu: { id: Menus.ViewSort, group: '1_viewmode' }
+				menu: { id: Menus.ViewSort, group: '1_viewmode', ...menu }
 			});
 	}
 
@@ -1153,8 +1162,24 @@ class SetTreeViewModeAction extends ViewAction<SCMViewPane> {
 	}
 }
 
+class SetTreeViewModeNavigationAction extends SetTreeViewModeAction {
+	constructor() {
+		super(
+			'workbench.scm.action.setTreeViewModeNavigation',
+			{
+				id: MenuId.SCMTitle,
+				when: ContextKeyExpr.and(ContextKeyExpr.equals('view', VIEW_PANE_ID), ContextKeys.RepositoryCount.notEqualsTo(0), ContextKeys.SCMViewMode.isEqualTo(ViewMode.List)),
+				group: 'navigation',
+				isHiddenByDefault: true,
+				order: -1000
+			});
+	}
+}
+
 registerAction2(SetListViewModeAction);
 registerAction2(SetTreeViewModeAction);
+registerAction2(SetListViewModeNavigationAction);
+registerAction2(SetTreeViewModeNavigationAction);
 
 abstract class RepositorySortAction extends Action2 {
 	constructor(private sortKey: ISCMRepositorySortKey, title: string) {
@@ -2412,7 +2437,14 @@ export class SCMViewPane extends ViewPane {
 					// History Item Group, History Item, or History Item Change
 					return (viewState?.expanded ?? []).indexOf(getSCMResourceId(e as TreeElement)) === -1;
 				},
-				accessibilityProvider: this.instantiationService.createInstance(SCMAccessibilityProvider)
+				accessibilityProvider: this.instantiationService.createInstance(SCMAccessibilityProvider),
+				twistieAdditionalCssClass: (e: unknown) => {
+					if (isSCMActionButton(e) || isSCMInput(e)) {
+						return 'force-no-twistie';
+					}
+
+					return undefined;
+				},
 			}) as WorkbenchCompressibleAsyncDataTree<ISCMViewService, TreeElement, FuzzyScore>;
 
 		this.disposables.add(this.tree);

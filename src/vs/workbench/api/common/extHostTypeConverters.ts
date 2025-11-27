@@ -2608,10 +2608,11 @@ export namespace ChatResponseCodeblockUriPart {
 			kind: 'codeblockUri',
 			uri: part.value,
 			isEdit: part.isEdit,
+			undoStopId: part.undoStopId
 		};
 	}
 	export function to(part: Dto<IChatResponseCodeblockUriPart>): vscode.ChatResponseCodeblockUriPart {
-		return new types.ChatResponseCodeblockUriPart(URI.revive(part.uri), part.isEdit);
+		return new types.ChatResponseCodeblockUriPart(URI.revive(part.uri), part.isEdit, part.undoStopId);
 	}
 }
 
@@ -3825,6 +3826,10 @@ export namespace McpServerDefinition {
 					type: McpServerTransportType.HTTP,
 					uri: item.uri,
 					headers: Object.entries(item.headers),
+					authentication: (item as vscode.McpHttpServerDefinition2).authentication ? {
+						providerId: (item as vscode.McpHttpServerDefinition2).authentication!.providerId,
+						scopes: (item as vscode.McpHttpServerDefinition2).authentication!.scopes
+					} : undefined,
 				}
 				: {
 					type: McpServerTransportType.Stdio,
