@@ -1239,13 +1239,17 @@ abstract class RepositorySelectionModeAction extends Action2 {
 			menu: [
 				{
 					id: Menus.Repositories,
-					when: ContextKeyExpr.greater(ContextKeys.RepositoryCount.key, 1),
+					when: ContextKeyExpr.and(
+						ContextKeyExpr.has('scm.providerCount'),
+						ContextKeyExpr.greater('scm.providerCount', 1)),
 					group: '2_selectionMode',
 					order
 				},
 				{
 					id: MenuId.SCMSourceControlTitle,
-					when: ContextKeyExpr.greater(ContextKeys.RepositoryCount.key, 1),
+					when: ContextKeyExpr.and(
+						ContextKeyExpr.has('scm.providerCount'),
+						ContextKeyExpr.greater('scm.providerCount', 1)),
 					group: '2_selectionMode',
 					order
 				},
@@ -2429,13 +2433,8 @@ export class SCMViewPane extends ViewPane {
 				overrideStyles: this.getLocationBasedColors().listOverrideStyles,
 				compressionEnabled: compressionEnabled.get(),
 				collapseByDefault: (e: unknown) => {
-					// Repository, Resource Group, Resource Folder (Tree)
-					if (isSCMRepository(e) || isSCMResourceGroup(e) || isSCMResourceNode(e)) {
-						return false;
-					}
-
-					// History Item Group, History Item, or History Item Change
-					return (viewState?.expanded ?? []).indexOf(getSCMResourceId(e as TreeElement)) === -1;
+					// Repository, Resource Group, Resource Folder (Tree) are not collapsed by default
+					return !(isSCMRepository(e) || isSCMResourceGroup(e) || isSCMResourceNode(e));
 				},
 				accessibilityProvider: this.instantiationService.createInstance(SCMAccessibilityProvider),
 				twistieAdditionalCssClass: (e: unknown) => {
