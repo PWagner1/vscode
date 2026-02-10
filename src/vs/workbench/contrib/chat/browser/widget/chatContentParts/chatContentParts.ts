@@ -5,9 +5,11 @@
 
 import { IDisposable } from '../../../../../../base/common/lifecycle.js';
 import { ChatTreeItem, IChatCodeBlockInfo } from '../../chat.js';
-import { IChatRendererContent } from '../../../common/model/chatViewModel.js';
+import { IChatRendererContent, IChatRequestViewModel, IChatResponseViewModel } from '../../../common/model/chatViewModel.js';
 import { CodeBlockModelCollection } from '../../../common/widget/codeBlockModelCollection.js';
 import { DiffEditorPool, EditorPool } from './chatContentCodePools.js';
+import { IObservable } from '../../../../../../base/common/observable.js';
+import { Event } from '../../../../../../base/common/event.js';
 
 export interface IChatContentPart extends IDisposable {
 	domNode: HTMLElement | undefined;
@@ -29,19 +31,26 @@ export interface IChatContentPart extends IDisposable {
 	 */
 	hasSameContent(other: IChatRendererContent, followingContent: IChatRendererContent[], element: ChatTreeItem): boolean;
 
+	/**
+	 * Called when the content part is mounted to the DOM after being detached
+	 * due to virtualization.
+	 */
+	onDidRemount?(): void;
+
 	addDisposable?(disposable: IDisposable): void;
 }
 
 export interface IChatContentPartRenderContext {
-	readonly element: ChatTreeItem;
+	readonly element: IChatRequestViewModel | IChatResponseViewModel;
 	readonly elementIndex: number;
 	readonly container: HTMLElement;
 	readonly content: ReadonlyArray<IChatRendererContent>;
 	readonly contentIndex: number;
-	readonly preceedingContentParts: ReadonlyArray<IChatContentPart>;
 	readonly editorPool: EditorPool;
 	readonly codeBlockStartIndex: number;
+	readonly treeStartIndex: number;
 	readonly diffEditorPool: DiffEditorPool;
 	readonly codeBlockModelCollection: CodeBlockModelCollection;
-	currentWidth(): number;
+	readonly currentWidth: IObservable<number>;
+	readonly onDidChangeVisibility: Event<boolean>;
 }

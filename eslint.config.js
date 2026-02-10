@@ -196,11 +196,6 @@ export default tseslint.config(
 			'extensions/emmet/src/updateImageSize.ts',
 			'extensions/emmet/src/util.ts',
 			'extensions/github-authentication/src/node/fetch.ts',
-			'extensions/terminal-suggest/src/fig/figInterface.ts',
-			'extensions/terminal-suggest/src/fig/fig-autocomplete-shared/mixins.ts',
-			'extensions/terminal-suggest/src/fig/fig-autocomplete-shared/specMetadata.ts',
-			'extensions/terminal-suggest/src/terminalSuggestMain.ts',
-			'extensions/terminal-suggest/src/test/env/pathExecutableCache.test.ts',
 			'extensions/tunnel-forwarding/src/extension.ts',
 			'extensions/typescript-language-features/src/utils/platform.ts',
 			'extensions/typescript-language-features/web/src/webServer.ts',
@@ -307,11 +302,6 @@ export default tseslint.config(
 			'src/vs/workbench/contrib/output/browser/outputView.ts',
 			'src/vs/workbench/contrib/preferences/browser/settingsTree.ts',
 			'src/vs/workbench/contrib/remoteTunnel/electron-browser/remoteTunnel.contribution.ts',
-			'src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts',
-			'src/vs/workbench/contrib/tasks/browser/taskTerminalStatus.ts',
-			'src/vs/workbench/contrib/tasks/browser/terminalTaskSystem.ts',
-			'src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/taskHelpers.ts',
-			'src/vs/workbench/contrib/terminalContrib/chatAgentTools/browser/tools/monitoring/outputMonitor.ts',
 			'src/vs/workbench/contrib/testing/browser/explorerProjections/listProjection.ts',
 			'src/vs/workbench/contrib/testing/browser/explorerProjections/treeProjection.ts',
 			'src/vs/workbench/contrib/testing/browser/testCoverageBars.ts',
@@ -454,6 +444,7 @@ export default tseslint.config(
 			'src/vs/platform/log/common/log.ts',
 			'src/vs/platform/log/common/logIpc.ts',
 			'src/vs/platform/log/electron-main/logIpc.ts',
+			'src/vs/platform/meteredConnection/electron-main/meteredConnectionChannel.ts',
 			'src/vs/platform/observable/common/wrapInHotClass.ts',
 			'src/vs/platform/observable/common/wrapInReloadableClass.ts',
 			'src/vs/platform/policy/common/policyIpc.ts',
@@ -574,7 +565,6 @@ export default tseslint.config(
 			'src/vs/workbench/api/common/extHostWebviewView.ts',
 			'src/vs/workbench/api/common/extHostWorkspace.ts',
 			'src/vs/workbench/api/common/extensionHostMain.ts',
-			'src/vs/workbench/api/common/shared/tasks.ts',
 			'src/vs/workbench/api/node/extHostAuthentication.ts',
 			'src/vs/workbench/api/node/extHostCLIServer.ts',
 			'src/vs/workbench/api/node/extHostConsoleForwarder.ts',
@@ -710,16 +700,6 @@ export default tseslint.config(
 			'src/vs/workbench/contrib/snippets/browser/commands/configureSnippets.ts',
 			'src/vs/workbench/contrib/snippets/browser/commands/insertSnippet.ts',
 			'src/vs/workbench/contrib/snippets/browser/snippetsService.ts',
-			'src/vs/workbench/contrib/tasks/browser/abstractTaskService.ts',
-			'src/vs/workbench/contrib/tasks/browser/runAutomaticTasks.ts',
-			'src/vs/workbench/contrib/tasks/browser/task.contribution.ts',
-			'src/vs/workbench/contrib/tasks/browser/terminalTaskSystem.ts',
-			'src/vs/workbench/contrib/tasks/common/jsonSchema_v1.ts',
-			'src/vs/workbench/contrib/tasks/common/jsonSchema_v2.ts',
-			'src/vs/workbench/contrib/tasks/common/problemMatcher.ts',
-			'src/vs/workbench/contrib/tasks/common/taskConfiguration.ts',
-			'src/vs/workbench/contrib/tasks/common/taskSystem.ts',
-			'src/vs/workbench/contrib/tasks/common/tasks.ts',
 			'src/vs/workbench/contrib/testing/common/storedValue.ts',
 			'src/vs/workbench/contrib/testing/test/browser/testObjectTree.ts',
 			'src/vs/workbench/contrib/typeHierarchy/browser/typeHierarchy.contribution.ts',
@@ -899,11 +879,17 @@ export default tseslint.config(
 					],
 					'verbs': [
 						'accept',
+						'archive',
 						'change',
 						'close',
 						'collapse',
 						'create',
 						'delete',
+						'lock',
+						'resume',
+						'shutdown',
+						'suspend',
+						'unlock',
 						'discover',
 						'dispose',
 						'drop',
@@ -1439,11 +1425,12 @@ export default tseslint.config(
 					// - electron-main
 					'when': 'hasNode',
 					'allow': [
-						'@vscode/watcher',
+						'@parcel/watcher',
 						'@vscode/sqlite3',
 						'@vscode/vscode-languagedetection',
 						'@vscode/ripgrep',
 						'@vscode/iconv-lite-umd',
+						'@vscode/native-watchdog',
 						'@vscode/policy-watcher',
 						'@vscode/proxy-agent',
 						'@vscode/spdlog',
@@ -1462,7 +1449,6 @@ export default tseslint.config(
 						'minimist',
 						'node:module',
 						'native-keymap',
-						'native-watchdog',
 						'net',
 						'node-pty',
 						'os',
@@ -1930,7 +1916,15 @@ export default tseslint.config(
 						'test/automation',
 						'test/smoke/**',
 						'@vscode/*',
+						'@parcel/*',
 						'@playwright/*',
+						'*' // node modules
+					]
+				},
+				{
+					'target': 'test/sanity/**',
+					'restrictions': [
+						'test/sanity/**',
 						'*' // node modules
 					]
 				},
@@ -1939,6 +1933,7 @@ export default tseslint.config(
 					'restrictions': [
 						'test/automation/**',
 						'@vscode/*',
+						'@parcel/*',
 						'playwright-core/**',
 						'@playwright/*',
 						'*' // node modules
@@ -1949,6 +1944,7 @@ export default tseslint.config(
 					'restrictions': [
 						'test/integration/**',
 						'@vscode/*',
+						'@parcel/*',
 						'@playwright/*',
 						'*' // node modules
 					]
@@ -1958,6 +1954,7 @@ export default tseslint.config(
 					'restrictions': [
 						'test/monaco/**',
 						'@vscode/*',
+						'@parcel/*',
 						'@playwright/*',
 						'*' // node modules
 					]
@@ -1968,6 +1965,7 @@ export default tseslint.config(
 						'test/automation',
 						'test/mcp/**',
 						'@vscode/*',
+						'@parcel/*',
 						'@playwright/*',
 						'@modelcontextprotocol/sdk/**/*',
 						'*' // node modules
@@ -2105,6 +2103,23 @@ export default tseslint.config(
 			'@typescript-eslint/prefer-optional-chain': 'warn',
 			'@typescript-eslint/prefer-readonly': 'warn',
 			'@typescript-eslint/consistent-generic-constructors': ['warn', 'constructor'],
+		}
+	},
+	// Allow querySelector/querySelectorAll in test files - it's acceptable for test assertions
+	{
+		files: [
+			'src/**/test/**/*.ts',
+			'extensions/**/test/**/*.ts',
+		],
+		rules: {
+			'no-restricted-syntax': [
+				'warn',
+				// Keep the Intl helper restriction even in tests
+				{
+					'selector': `NewExpression[callee.object.name='Intl']`,
+					'message': 'Use safeIntl helper instead for safe and lazy use of potentially expensive Intl methods.'
+				},
+			],
 		}
 	},
 );
