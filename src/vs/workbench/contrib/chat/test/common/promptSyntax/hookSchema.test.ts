@@ -35,14 +35,14 @@ suite('HookSchema', () => {
 					command: './scripts/validate.sh',
 					cwd: 'src',
 					env: { NODE_ENV: 'test' },
-					timeoutSec: 60
+					timeout: 60
 				}, workspaceRoot, userHome);
 				assert.deepStrictEqual(result, {
 					type: 'command',
 					command: './scripts/validate.sh',
 					cwd: URI.file('/workspace/src'),
 					env: { NODE_ENV: 'test' },
-					timeoutSec: 60
+					timeout: 60
 				});
 			});
 
@@ -118,18 +118,18 @@ suite('HookSchema', () => {
 				});
 			});
 
-			test('powershell with timeoutSec', () => {
+			test('powershell with timeout', () => {
 				const result = resolveHookCommand({
 					type: 'command',
 					powershell: 'Get-Process',
-					timeoutSec: 30
+					timeout: 30
 				}, workspaceRoot, userHome);
 				assert.deepStrictEqual(result, {
 					type: 'command',
 					windows: 'Get-Process',
 					windowsSource: 'powershell',
 					cwd: workspaceRoot,
-					timeoutSec: 30
+					timeout: 30
 				});
 			});
 
@@ -277,11 +277,11 @@ suite('HookSchema', () => {
 				});
 			});
 
-			test('ignores non-number timeoutSec', () => {
+			test('ignores non-number timeout', () => {
 				const result = resolveHookCommand({
 					type: 'command',
 					command: 'echo hello',
-					timeoutSec: '30'
+					timeout: '30'
 				}, workspaceRoot, userHome);
 				assert.deepStrictEqual(result, {
 					type: 'command',
@@ -461,7 +461,7 @@ suite('HookSchema', () => {
 			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Windows), '');
 		});
 
-		test('applies platform override for display with platform badge', () => {
+		test('applies platform override for display', () => {
 			const hook: IHookCommand = {
 				type: 'command',
 				command: 'default-command',
@@ -469,10 +469,10 @@ suite('HookSchema', () => {
 				linux: 'linux-command',
 				osx: 'osx-command'
 			};
-			// Should include platform badge when using platform-specific override
-			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Windows), '[Windows] win-command');
-			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Macintosh), '[macOS] osx-command');
-			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Linux), '[Linux] linux-command');
+			// Should resolve to platform-specific command
+			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Windows), 'win-command');
+			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Macintosh), 'osx-command');
+			assert.strictEqual(formatHookCommandLabel(hook, OperatingSystem.Linux), 'linux-command');
 		});
 
 		test('no platform badge when falling back to default command', () => {

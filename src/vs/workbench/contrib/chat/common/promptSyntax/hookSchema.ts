@@ -26,6 +26,17 @@ export enum HookType {
 }
 
 /**
+ * Maps Copilot CLI hook type names to our abstract HookType.
+ * Copilot CLI uses camelCase names.
+ */
+export const COPILOT_CLI_HOOK_TYPE_MAP = {
+	'sessionStart': HookType.SessionStart,
+	'userPromptSubmitted': HookType.UserPromptSubmit,
+	'preToolUse': HookType.PreToolUse,
+	'postToolUse': HookType.PostToolUse,
+} as const satisfies Record<string, HookType>;
+
+/**
  * String literal type derived from HookType enum values.
  */
 export type HookTypeValue = `${HookType}`;
@@ -92,7 +103,7 @@ export interface IHookCommand {
 	/** Resolved working directory URI. */
 	readonly cwd?: URI;
 	readonly env?: Record<string, string>;
-	readonly timeoutSec?: number;
+	readonly timeout?: number;
 	/** Original JSON field name that provided the windows command. */
 	readonly windowsSource?: 'windows' | 'powershell';
 	/** Original JSON field name that provided the linux command. */
@@ -164,10 +175,10 @@ const hookCommandSchema: IJSONSchema = {
 			additionalProperties: { type: 'string' },
 			description: nls.localize('hook.env', 'Additional environment variables that are merged with the existing environment.')
 		},
-		timeoutSec: {
+		timeout: {
 			type: 'number',
 			default: 30,
-			description: nls.localize('hook.timeoutSec', 'Maximum execution time in seconds (default: 30).')
+			description: nls.localize('hook.timeout', 'Maximum execution time in seconds (default: 30).')
 		}
 	}
 };
@@ -175,6 +186,116 @@ const hookCommandSchema: IJSONSchema = {
 const hookArraySchema: IJSONSchema = {
 	type: 'array',
 	items: hookCommandSchema
+};
+
+/**
+ * Hook properties for the VS Code / PascalCase format.
+ */
+const vscodeHookProperties: { [key in HookType]: IJSONSchema } = {
+	SessionStart: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.sessionStart', 'Executed when a new agent session begins. Use to initialize environments, log session starts, validate project state, or set up temporary resources.')
+	},
+	UserPromptSubmit: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.userPromptSubmit', 'Executed when the user submits a prompt to the agent. Use to log user requests for auditing and usage analysis.')
+	},
+	PreToolUse: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.preToolUse', 'Executed before the agent uses any tool. This is the most powerful hook as it can approve or deny tool executions. Use to block dangerous commands, enforce security policies, require approval for sensitive operations, or log tool usage.')
+	},
+	PostToolUse: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.postToolUse', 'Executed after a tool completes execution successfully. Use to log execution results, track usage statistics, generate audit trails, or monitor performance.')
+	},
+	PreCompact: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.preCompact', 'Executed before the agent compacts the conversation context. Use to save conversation state, export important information, or prepare for context reduction.')
+	},
+	SubagentStart: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.subagentStart', 'Executed when a subagent is started. Use to log subagent spawning, track nested agent usage, or initialize subagent-specific resources.')
+	},
+	SubagentStop: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.subagentStop', 'Executed when a subagent stops. Use to log subagent completion, cleanup subagent resources, or aggregate subagent results.')
+	},
+	Stop: {
+		...hookArraySchema,
+		description: nls.localize('hookFile.stop', 'Executed when the agent session stops. Use to cleanup resources, generate final reports, or send completion notifications.')
+	}
+};
+
+/**
+ * Hook command schema for the Copilot CLI format.
+ * Adds `bash`, `powershell`, and `timeoutSec` fields alongside the standard ones.
+ */
+const copilotCliHookCommandSchema: IJSONSchema = {
+	type: 'object',
+	additionalProperties: true,
+	required: ['type'],
+	anyOf: [
+		{ required: ['bash'] },
+		{ required: ['powershell'] }
+	],
+	errorMessage: nls.localize('hook.cliCommandRequired', 'At least one of "bash" or "powershell" must be specified.'),
+	properties: {
+		type: {
+			type: 'string',
+			enum: ['command'],
+			description: nls.localize('hook.type', 'Must be "command".')
+		},
+		bash: {
+			type: 'string',
+			description: nls.localize('hook.bash', 'Bash command for Linux and macOS.')
+		},
+		powershell: {
+			type: 'string',
+			description: nls.localize('hook.powershell', 'PowerShell command for Windows.')
+		},
+		cwd: {
+			type: 'string',
+			description: nls.localize('hook.cwd', 'Working directory for the script (relative to repository root).')
+		},
+		env: {
+			type: 'object',
+			additionalProperties: { type: 'string' },
+			description: nls.localize('hook.env', 'Additional environment variables that are merged with the existing environment.')
+		},
+		timeoutSec: {
+			type: 'number',
+			default: 10,
+			description: nls.localize('hook.timeoutSec', 'Maximum execution time in seconds (default: 10).')
+		}
+	}
+};
+
+const copilotCliHookArraySchema: IJSONSchema = {
+	type: 'array',
+	items: copilotCliHookCommandSchema
+};
+
+/**
+ * Hook properties for the Copilot CLI / camelCase format.
+ * Maps from the Copilot CLI hook type names defined in COPILOT_CLI_HOOK_TYPE_MAP.
+ */
+const copilotCliHookProperties: { [key in keyof typeof COPILOT_CLI_HOOK_TYPE_MAP]: IJSONSchema } = {
+	sessionStart: {
+		...copilotCliHookArraySchema,
+		description: nls.localize('hookFile.cli.sessionStart', 'Executed when a new agent session begins.')
+	},
+	userPromptSubmitted: {
+		...copilotCliHookArraySchema,
+		description: nls.localize('hookFile.cli.userPromptSubmitted', 'Executed when the user submits a prompt to the agent.')
+	},
+	preToolUse: {
+		...copilotCliHookArraySchema,
+		description: nls.localize('hookFile.cli.preToolUse', 'Executed before the agent uses any tool. Can approve or deny tool executions.')
+	},
+	postToolUse: {
+		...copilotCliHookArraySchema,
+		description: nls.localize('hookFile.cli.postToolUse', 'Executed after a tool completes execution successfully.')
+	},
 };
 
 export const hookFileSchema: IJSONSchema = {
@@ -188,39 +309,33 @@ export const hookFileSchema: IJSONSchema = {
 			type: 'object',
 			description: nls.localize('hookFile.hooks', 'Hook definitions organized by type.'),
 			additionalProperties: true,
-			properties: {
-				SessionStart: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.sessionStart', 'Executed when a new agent session begins. Use to initialize environments, log session starts, validate project state, or set up temporary resources.')
-				},
-				UserPromptSubmit: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.userPromptSubmit', 'Executed when the user submits a prompt to the agent. Use to log user requests for auditing and usage analysis.')
-				},
-				PreToolUse: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.preToolUse', 'Executed before the agent uses any tool. This is the most powerful hook as it can approve or deny tool executions. Use to block dangerous commands, enforce security policies, require approval for sensitive operations, or log tool usage.')
-				},
-				PostToolUse: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.postToolUse', 'Executed after a tool completes execution successfully. Use to log execution results, track usage statistics, generate audit trails, or monitor performance.')
-				},
-				PreCompact: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.preCompact', 'Executed before the agent compacts the conversation context. Use to save conversation state, export important information, or prepare for context reduction.')
-				},
-				SubagentStart: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.subagentStart', 'Executed when a subagent is started. Use to log subagent spawning, track nested agent usage, or initialize subagent-specific resources.')
-				},
-				SubagentStop: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.subagentStop', 'Executed when a subagent stops. Use to log subagent completion, cleanup subagent resources, or aggregate subagent results.')
-				},
-				Stop: {
-					...hookArraySchema,
-					description: nls.localize('hookFile.stop', 'Executed when the agent session stops. Use to cleanup resources, generate final reports, or send completion notifications.')
-				}
+		}
+	},
+	// Conditionally apply PascalCase or camelCase hook properties based on
+	// whether the file uses the Copilot CLI format (detected by the "version" field).
+	if: {
+		required: ['version'],
+		properties: {
+			version: { type: 'number' }
+		}
+	},
+	then: {
+		// Copilot CLI format: camelCase hook names, bash/powershell/timeoutSec fields
+		properties: {
+			version: {
+				type: 'number',
+				description: nls.localize('hookFile.version', 'Hook configuration format version.'),
+			},
+			hooks: {
+				properties: copilotCliHookProperties
+			}
+		}
+	},
+	else: {
+		// VS Code / PascalCase format
+		properties: {
+			hooks: {
+				properties: vscodeHookProperties
 			}
 		}
 	},
@@ -240,7 +355,7 @@ export const hookFileSchema: IJSONSchema = {
 						{
 							type: 'command',
 							command: '${2:./scripts/validate.sh}',
-							timeoutSec: 15
+							timeout: 15
 						}
 					]
 				}
@@ -278,7 +393,7 @@ export function toHookType(rawHookTypeId: string): HookType | undefined {
  * - powershell -> windows
  * This is an internal helper - use resolveHookCommand for the full resolution.
  */
-function normalizeHookCommand(raw: Record<string, unknown>): { command?: string; windows?: string; linux?: string; osx?: string; windowsSource?: 'windows' | 'powershell'; linuxSource?: 'linux' | 'bash'; osxSource?: 'osx' | 'bash'; cwd?: string; env?: Record<string, string>; timeoutSec?: number } | undefined {
+function normalizeHookCommand(raw: Record<string, unknown>): { command?: string; windows?: string; linux?: string; osx?: string; windowsSource?: 'windows' | 'powershell'; linuxSource?: 'linux' | 'bash'; osxSource?: 'osx' | 'bash'; cwd?: string; env?: Record<string, string>; timeout?: number } | undefined {
 	if (raw.type !== 'command') {
 		return undefined;
 	}
@@ -313,7 +428,8 @@ function normalizeHookCommand(raw: Record<string, unknown>): { command?: string;
 		...(osxSource && { osxSource }),
 		...(typeof raw.cwd === 'string' && { cwd: raw.cwd }),
 		...(typeof raw.env === 'object' && raw.env !== null && { env: raw.env as Record<string, string> }),
-		...(typeof raw.timeoutSec === 'number' && { timeoutSec: raw.timeoutSec }),
+		...(typeof raw.timeout !== 'number' && typeof raw.timeoutSec === 'number' && { timeout: raw.timeoutSec }),
+		...(typeof raw.timeout === 'number' && { timeout: raw.timeout }),
 	};
 }
 
@@ -407,13 +523,6 @@ export function formatHookCommandLabel(hook: IHookCommand, os: OperatingSystem):
 	if (!command) {
 		return '';
 	}
-
-	// Add platform badge if using platform-specific override
-	if (isUsingPlatformOverride(hook, os)) {
-		const platformLabel = getPlatformLabel(os);
-		return `[${platformLabel}] ${command}`;
-	}
-
 	return command;
 }
 
@@ -456,6 +565,6 @@ export function resolveHookCommand(raw: Record<string, unknown>, workspaceRootUr
 		...(normalized.osxSource && { osxSource: normalized.osxSource }),
 		...(cwdUri && { cwd: cwdUri }),
 		...(normalized.env && { env: normalized.env }),
-		...(normalized.timeoutSec !== undefined && { timeoutSec: normalized.timeoutSec }),
+		...(normalized.timeout !== undefined && { timeout: normalized.timeout }),
 	};
 }
