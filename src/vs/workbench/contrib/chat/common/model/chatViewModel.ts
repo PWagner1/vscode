@@ -7,12 +7,13 @@ import { Codicon } from '../../../../../base/common/codicons.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { IMarkdownString } from '../../../../../base/common/htmlContent.js';
 import { Disposable, dispose } from '../../../../../base/common/lifecycle.js';
+import { RunOnceScheduler } from '../../../../../base/common/async.js';
 import { IObservable } from '../../../../../base/common/observable.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IChatRequestVariableEntry } from '../attachments/chatVariableEntries.js';
-import { ChatAgentVoteDirection, ChatAgentVoteDownReason, ChatRequestQueueKind, IChatCodeCitation, IChatContentReference, IChatDisabledClaudeHooksPart, IChatFollowup, IChatMcpServersStarting, IChatProgressMessage, IChatQuestionCarousel, IChatResponseErrorDetails, IChatTask, IChatUsedContext } from '../chatService/chatService.js';
+import { ChatAgentVoteDirection, ChatRequestQueueKind, IChatCodeCitation, IChatContentReference, IChatDisabledClaudeHooksPart, IChatFollowup, IChatMcpServersStarting, IChatProgressMessage, IChatQuestionCarousel, IChatResponseErrorDetails, IChatTask, IChatUsedContext } from '../chatService/chatService.js';
 import { getFullyQualifiedId, IChatAgentCommand, IChatAgentData, IChatAgentNameService, IChatAgentResult } from '../participants/chatAgents.js';
 import { IParsedChatRequest } from '../requestParser/chatParserTypes.js';
 import { CodeBlockModelCollection } from '../widget/codeBlockModelCollection.js';
@@ -93,6 +94,7 @@ export interface IChatRequestViewModel {
 	readonly slashCommand: IChatAgentCommand | undefined;
 	readonly agentOrSlashCommandDetected: boolean;
 	readonly shouldBeBlocked: IObservable<boolean>;
+	readonly attachedContext?: readonly IChatRequestVariableEntry[];
 	readonly modelId?: string;
 	readonly timestamp: number;
 	/** The kind of pending request, or undefined if not pending */
@@ -206,7 +208,6 @@ export interface IChatResponseViewModel {
 	readonly isCanceled: boolean;
 	readonly isStale: boolean;
 	readonly vote: ChatAgentVoteDirection | undefined;
-	readonly voteDownReason: ChatAgentVoteDownReason | undefined;
 	readonly replyFollowups?: IChatFollowup[];
 	readonly errorDetails?: IChatResponseErrorDetails;
 	readonly result?: IChatAgentResult;
@@ -216,7 +217,6 @@ export interface IChatResponseViewModel {
 	renderData?: IChatResponseRenderData;
 	currentRenderedHeight: number | undefined;
 	setVote(vote: ChatAgentVoteDirection): void;
-	setVoteDownReason(reason: ChatAgentVoteDownReason | undefined): void;
 	usedReferencesExpanded?: boolean;
 	vulnerabilitiesListExpanded: boolean;
 	setEditApplied(edit: IChatTextEditGroup, editCount: number): void;
@@ -463,6 +463,10 @@ export class ChatRequestViewModel implements IChatRequestViewModel {
 
 	currentRenderedHeight: number | undefined;
 
+	get attachedContext() {
+		return this._model.attachedContext;
+	}
+
 	get modelId() {
 		return this._model.modelId;
 	}
@@ -586,10 +590,6 @@ export class ChatResponseViewModel extends Disposable implements IChatResponseVi
 		return this._model.vote;
 	}
 
-	get voteDownReason() {
-		return this._model.voteDownReason;
-	}
-
 	get requestId() {
 		return this._model.requestId;
 	}
@@ -645,11 +645,13 @@ export class ChatResponseViewModel extends Disposable implements IChatResponseVi
 			this.liveUpdateTracker = this.instantiationService.createInstance(ChatStreamStatsTracker);
 		}
 
+		const wordCountScheduler = this.liveUpdateTracker ? this._register(new RunOnceScheduler(() => {
+			const wordCount = countWords(_model.entireResponse.getMarkdown());
+			this.liveUpdateTracker!.update({ totalWordCount: wordCount });
+		}, 0)) : undefined;
+
 		this._register(_model.onDidChange(() => {
-			if (this.liveUpdateTracker) {
-				const wordCount = countWords(_model.entireResponse.getMarkdown());
-				this.liveUpdateTracker.update({ totalWordCount: wordCount });
-			}
+			wordCountScheduler?.schedule();
 
 			// new data -> new id, new content to render
 			this._modelChangeCount++;
@@ -661,11 +663,6 @@ export class ChatResponseViewModel extends Disposable implements IChatResponseVi
 	setVote(vote: ChatAgentVoteDirection): void {
 		this._modelChangeCount++;
 		this._model.setVote(vote);
-	}
-
-	setVoteDownReason(reason: ChatAgentVoteDownReason | undefined): void {
-		this._modelChangeCount++;
-		this._model.setVoteDownReason(reason);
 	}
 
 	setEditApplied(edit: IChatTextEditGroup, editCount: number) {
