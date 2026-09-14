@@ -4,21 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
-import { mkdirSync, rmSync } from 'fs';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { DisposableStore } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { URI } from '../../../../base/common/uri.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
 import { FileService } from '../../../files/common/fileService.js';
-import { DiskFileSystemProvider } from '../../../files/node/diskFileSystemProvider.js';
+import { createFileSystemProviderError, FileSystemProviderErrorCode, type IStat } from '../../../files/common/files.js';
 import { InMemoryFileSystemProvider } from '../../../files/common/inMemoryFilesystemProvider.js';
 import { NullLogService } from '../../../log/common/log.js';
-import { AgentSession } from '../../common/agentService.js';
+import { AgentSession } from '../../common/agent.js';
+import { buildChatUri } from '../../common/state/sessionState.js';
 import { SessionDataService } from '../../node/sessionDataService.js';
-import { join } from '../../../../base/common/path.js';
+
+class ControllableStatFileSystemProvider extends InMemoryFileSystemProvider {
+	statError: Error | undefined;
+
+	override stat(resource: URI): Promise<IStat> {
+		return this.statError ? Promise.reject(this.statError) : super.stat(resource);
+	}
+}
 
 suite('SessionDataService', () => {
 
@@ -48,6 +53,17 @@ suite('SessionDataService', () => {
 		assert.strictEqual(dir.toString(), URI.joinPath(basePath, 'agentSessionData', 'foo-bar-baz-qux').toString());
 	});
 
+	test('getSessionDataDir gives each peer chat of a session its own directory', () => {
+		const session = AgentSession.uri('copilotcli', 'session-1');
+		const chatA = URI.parse(buildChatUri(session, 'chat-a'));
+		const chatB = URI.parse(buildChatUri(session, 'chat-b'));
+		const dirA = service.getSessionDataDir(chatA);
+		const dirB = service.getSessionDataDir(chatB);
+		assert.notStrictEqual(dirA.toString(), dirB.toString());
+		// The plain session URI keeps its authority-free directory.
+		assert.strictEqual(service.getSessionDataDir(session).toString(), URI.joinPath(basePath, 'agentSessionData', 'session-1').toString());
+	});
+
 	test('deleteSessionData removes directory', async () => {
 		const session = AgentSession.uri('copilot', 'session-1');
 		const dir = service.getSessionDataDir(session);
@@ -71,6 +87,7 @@ suite('SessionDataService', () => {
 		await fileService.createFolder(URI.joinPath(baseDir, 'keep-2'));
 		await fileService.createFolder(URI.joinPath(baseDir, 'orphan-1'));
 		await fileService.createFolder(URI.joinPath(baseDir, 'orphan-2'));
+		await fileService.createFolder(URI.joinPath(baseDir, 'devcontainer-worktree-detached'));
 
 		await service.cleanupOrphanedData(new Set(['keep-1', 'keep-2']));
 
@@ -78,6 +95,8 @@ suite('SessionDataService', () => {
 		assert.ok(await fileService.exists(URI.joinPath(baseDir, 'keep-2')));
 		assert.ok(!(await fileService.exists(URI.joinPath(baseDir, 'orphan-1'))));
 		assert.ok(!(await fileService.exists(URI.joinPath(baseDir, 'orphan-2'))));
+		assert.ok(await fileService.exists(URI.joinPath(baseDir, 'devcontainer-worktree-detached')));
+		assert.deepStrictEqual(await service.listSessionDataIds('devcontainer-worktree-'), ['devcontainer-worktree-detached']);
 	});
 
 	test('cleanupOrphanedData is a no-op when base directory does not exist', async () => {
@@ -89,21 +108,20 @@ suite('SessionDataService', () => {
 suite('SessionDataService — openDatabase ref-counting', () => {
 
 	const disposables = new DisposableStore();
+	const basePath = URI.from({ scheme: Schemas.inMemory, path: '/userData' });
+	let fileService: FileService;
+	let provider: ControllableStatFileSystemProvider;
 	let service: SessionDataService;
-	let testDir: string;
 
 	setup(() => {
-		testDir = join(tmpdir(), `vscode-session-data-test-${randomUUID()}`);
-		mkdirSync(testDir, { recursive: true });
-
-		const fileService = disposables.add(new FileService(new NullLogService()));
-		disposables.add(fileService.registerProvider(Schemas.file, disposables.add(new DiskFileSystemProvider(new NullLogService()))));
-		service = new SessionDataService(URI.file(testDir), fileService, new NullLogService());
+		fileService = disposables.add(new FileService(new NullLogService()));
+		provider = disposables.add(new ControllableStatFileSystemProvider());
+		disposables.add(fileService.registerProvider(Schemas.inMemory, provider));
+		service = new SessionDataService(basePath, fileService, new NullLogService(), () => ':memory:');
 	});
 
 	teardown(() => {
 		disposables.clear();
-		rmSync(testDir, { recursive: true, force: true });
 	});
 	ensureNoDisposablesAreLeakedInTestSuite();
 
@@ -116,6 +134,16 @@ suite('SessionDataService — openDatabase ref-counting', () => {
 		const edits = await ref.object.getFileEdits([]);
 		assert.deepStrictEqual(edits, []);
 		await ref.object.close();
+	});
+
+	test('tryOpenDatabase returns undefined only for a missing database', async () => {
+		const session = AgentSession.uri('copilot', 'strict-existing-test');
+		const missing = await service.tryOpenDatabase(session);
+		const permissionError = createFileSystemProviderError('permission denied', FileSystemProviderErrorCode.NoPermissions);
+		provider.statError = permissionError;
+
+		assert.strictEqual(missing, undefined);
+		await assert.rejects(service.tryOpenDatabase(session), error => error === permissionError);
 	});
 
 	test('multiple references share the same database', async () => {

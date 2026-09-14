@@ -5,62 +5,53 @@
 
 import './media/aiCustomizationManagement.css';
 import * as DOM from '../../../../../base/browser/dom.js';
+import * as aria from '../../../../../base/browser/ui/aria/aria.js';
 import { ActionBar } from '../../../../../base/browser/ui/actionbar/actionbar.js';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../../base/common/lifecycle.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
-import { CancellationToken } from '../../../../../base/common/cancellation.js';
 import { autorun } from '../../../../../base/common/observable.js';
-import { basename, dirname, isEqual, isEqualOrParent } from '../../../../../base/common/resources.js';
+import { isEqual } from '../../../../../base/common/resources.js';
 import { ThemeIcon } from '../../../../../base/common/themables.js';
 import { URI } from '../../../../../base/common/uri.js';
-import { ResourceSet } from '../../../../../base/common/map.js';
 import { Codicon } from '../../../../../base/common/codicons.js';
 import { localize } from '../../../../../nls.js';
 import { IInstantiationService } from '../../../../../platform/instantiation/common/instantiation.js';
 import { WorkbenchList } from '../../../../../platform/list/browser/listService.js';
-import { IListVirtualDelegate, IListRenderer, IListContextMenuEvent } from '../../../../../base/browser/ui/list/list.js';
+import { IListVirtualDelegate, IListRenderer, IListContextMenuEvent, NotSelectableGroupId } from '../../../../../base/browser/ui/list/list.js';
 import { IPromptsService, PromptsStorage } from '../../common/promptSyntax/service/promptsService.js';
 import { PromptsType } from '../../common/promptSyntax/promptTypes.js';
 import { agentIcon, instructionsIcon, promptIcon, skillIcon, hookIcon, userIcon, workspaceIcon, extensionIcon, pluginIcon, builtinIcon } from './aiCustomizationIcons.js';
-import { AI_CUSTOMIZATION_ITEM_STORAGE_KEY, AI_CUSTOMIZATION_ITEM_TYPE_KEY, AI_CUSTOMIZATION_ITEM_URI_KEY, AI_CUSTOMIZATION_ITEM_PLUGIN_URI_KEY, AICustomizationManagementItemMenuId, AICustomizationManagementCreateMenuId, AICustomizationManagementSection, BUILTIN_STORAGE, AI_CUSTOMIZATION_ITEM_DISABLED_KEY } from './aiCustomizationManagement.js';
+import { AI_CUSTOMIZATION_ITEM_STORAGE_KEY, AI_CUSTOMIZATION_ITEM_TYPE_KEY, AI_CUSTOMIZATION_ITEM_URI_KEY, AI_CUSTOMIZATION_ITEM_PLUGIN_URI_KEY, AICustomizationManagementCreateMenuId, AICustomizationManagementSection, AI_CUSTOMIZATION_ITEM_DISABLED_KEY, getAICustomizationManagementItemMenuId, sectionToPromptType } from './aiCustomizationManagement.js';
 import { IAgentPluginService } from '../../common/plugins/agentPluginService.js';
 import { InputBox } from '../../../../../base/browser/ui/inputbox/inputBox.js';
-import { defaultButtonStyles, defaultInputBoxStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
+import { defaultButtonStyles, defaultInputBoxStyles, getButtonStyles } from '../../../../../platform/theme/browser/defaultStyles.js';
 import { Delayer } from '../../../../../base/common/async.js';
 import { IContextMenuService, IContextViewService } from '../../../../../platform/contextview/browser/contextView.js';
 import { HighlightedLabel } from '../../../../../base/browser/ui/highlightedlabel/highlightedLabel.js';
 import { matchesContiguousSubString, IMatch } from '../../../../../base/common/filters.js';
 import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { Button, ButtonWithDropdown } from '../../../../../base/browser/ui/button/button.js';
-import { IMenuService, MenuItemAction } from '../../../../../platform/actions/common/actions.js';
+import { IMenu, IMenuService, MenuItemAction } from '../../../../../platform/actions/common/actions.js';
 import { IContextKeyService } from '../../../../../platform/contextkey/common/contextkey.js';
 import { createActionViewItem, getContextMenuActions } from '../../../../../platform/actions/browser/menuEntryActionViewItem.js';
-import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { ILabelService } from '../../../../../platform/label/common/label.js';
-import { IAICustomizationWorkspaceService, applyStorageSourceFilter } from '../../common/aiCustomizationWorkspaceService.js';
-import { Action, Separator } from '../../../../../base/common/actions.js';
+import { AICustomizationSources, IAICustomizationWorkspaceService } from '../../common/aiCustomizationWorkspaceService.js';
+import { Action, IAction, Separator } from '../../../../../base/common/actions.js';
 import { IClipboardService } from '../../../../../platform/clipboard/common/clipboardService.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
 import { getDefaultHoverDelegate } from '../../../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { IFileService } from '../../../../../platform/files/common/files.js';
-import { IPathService } from '../../../../services/path/common/pathService.js';
+import { hasReadableCustomizationContent } from '../../../../../platform/agentHost/common/agentHostCustomizationUri.js';
 import { generateCustomizationDebugReport } from './aiCustomizationDebugPanel.js';
 import { getCustomizationSecondaryText } from './aiCustomizationListWidgetUtils.js';
-import { parseHooksFromFile } from '../../common/promptSyntax/hookCompatibility.js';
-import { formatHookCommandLabel } from '../../common/promptSyntax/hookSchema.js';
-import { HookType, HOOK_METADATA } from '../../common/promptSyntax/hookTypes.js';
-import { parse as parseJSONC } from '../../../../../base/common/json.js';
-import { Schemas } from '../../../../../base/common/network.js';
-import { OS } from '../../../../../base/common/platform.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
-import { ICustomizationHarnessService, IExternalCustomizationItem, IExternalCustomizationItemProvider, matchesWorkspaceSubpath, matchesInstructionFileFilter } from '../../common/customizationHarnessService.js';
-import { evaluateApplyToPattern } from '../../common/promptSyntax/computeAutomaticInstructions.js';
-import { isInClaudeRulesFolder, getCleanPromptName, AGENT_MD_FILENAME, CLAUDE_MD_FILENAME, CLAUDE_LOCAL_MD_FILENAME, COPILOT_CUSTOM_INSTRUCTIONS_FILENAME } from '../../common/promptSyntax/config/promptFileLocations.js';
-import { PromptHeader } from '../../common/promptSyntax/promptFileParser.js';
-import { ExtensionIdentifier } from '../../../../../platform/extensions/common/extensions.js';
+import { ICustomizationHarnessService } from '../../common/customizationHarnessService.js';
 import { ICommandService } from '../../../../../platform/commands/common/commands.js';
-import { IProductService } from '../../../../../platform/product/common/productService.js';
-import { IUserDataProfileService } from '../../../../services/userDataProfile/common/userDataProfile.js';
+import { IAICustomizationListItem } from './aiCustomizationItemSource.js';
+import { IAICustomizationItemsModel, ItemsModelSection } from './aiCustomizationItemsModel.js';
+import { createCustomizationCardPrimaryAction, CustomizationCardListController, getVirtualizedSectionMinimumHeight, layoutVirtualizedSectionList, layoutVirtualizedSections, renderVirtualizedSectionLoadingPlaceholder, setupCollapsibleSection } from './customizationCardList.js';
+import { DomScrollableElement } from '../../../../../base/browser/ui/scrollbar/scrollableElement.js';
+import { ScrollbarVisibility } from '../../../../../base/common/scrollable.js';
 
 export { truncateToFirstLine } from './aiCustomizationListWidgetUtils.js';
 
@@ -77,7 +68,7 @@ type CustomizationEditorSearchClassification = {
 	section: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The active section when the search was performed.' };
 	resultCount: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'The number of items matching the search query.' };
 	owner: 'joshspicer';
-	comment: 'Tracks search usage in the Chat Customizations editor.';
+	comment: 'Tracks search usage in the Agent Customizations editor.';
 };
 
 //#endregion
@@ -85,39 +76,6 @@ type CustomizationEditorSearchClassification = {
 const ITEM_HEIGHT = 44;
 const GROUP_HEADER_HEIGHT = 36;
 const GROUP_HEADER_HEIGHT_WITH_SEPARATOR = 40;
-
-/**
- * Represents an AI customization item in the list.
- */
-export interface IAICustomizationListItem {
-	readonly id: string;
-	readonly uri: URI;
-	readonly name: string;
-	readonly filename: string;
-	readonly description?: string;
-	/** Storage origin. Set by core when items come from promptsService; omitted for external provider items. */
-	readonly storage?: PromptsStorage;
-	readonly promptType: PromptsType;
-	readonly disabled: boolean;
-	/** When set, overrides `storage` for display grouping purposes. */
-	readonly groupKey?: string;
-	/** URI of the parent plugin, when this item comes from an installed plugin. */
-	readonly pluginUri?: URI;
-	/** When set, overrides the formatted name for display. */
-	readonly displayName?: string;
-	/** When set, shows a small inline badge next to the item name. */
-	readonly badge?: string;
-	/** Tooltip shown when hovering the badge. */
-	readonly badgeTooltip?: string;
-	/** When set, overrides the default prompt-type icon. */
-	readonly typeIcon?: ThemeIcon;
-	/** True when item comes from the default chat extension (grouped under Built-in). */
-	readonly isBuiltin?: boolean;
-	/** Display name of the contributing extension (for non-built-in extension items). */
-	readonly extensionLabel?: string;
-	nameMatches?: IMatch[];
-	descriptionMatches?: IMatch[];
-}
 
 /**
  * Represents a collapsible group header in the list.
@@ -144,6 +102,13 @@ interface IFileItemEntry {
 
 type IListEntry = IGroupHeaderEntry | IFileItemEntry;
 
+interface ICustomizationSectionList {
+	readonly list: WorkbenchList<IFileItemEntry>;
+	readonly items: readonly IAICustomizationListItem[];
+	readonly container: HTMLElement;
+	readonly key: string;
+}
+
 /**
  * Delegate for the AI Customization list.
  */
@@ -167,9 +132,12 @@ interface IAICustomizationItemTemplateData {
 	readonly typeIcon: HTMLElement;
 	readonly nameLabel: HighlightedLabel;
 	readonly badge: HTMLElement;
+	readonly statusIcon: HTMLElement;
 	readonly description: HighlightedLabel;
 	readonly disposables: DisposableStore;
 	readonly elementDisposables: DisposableStore;
+	/** Index of the row currently rendered into this template, or -1 when unbound. */
+	currentIndex: number;
 }
 
 interface IGroupHeaderTemplateData {
@@ -203,9 +171,9 @@ class GroupHeaderRenderer implements IListRenderer<IGroupHeaderEntry, IGroupHead
 		const icon = DOM.append(container, $('.group-icon'));
 		const labelGroup = DOM.append(container, $('.group-label-group'));
 		const label = DOM.append(labelGroup, $('.group-label'));
-		const infoIcon = DOM.append(labelGroup, $('.group-info'));
-		infoIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.info));
 		const count = DOM.append(container, $('.group-count'));
+		const infoIcon = DOM.append(container, $('.group-info'));
+		infoIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.info));
 
 		return { container, chevron, icon, label, count, infoIcon, disposables, elementDisposables };
 	}
@@ -215,7 +183,7 @@ class GroupHeaderRenderer implements IListRenderer<IGroupHeaderEntry, IGroupHead
 
 		// Chevron
 		templateData.chevron.className = 'group-chevron';
-		templateData.chevron.classList.add(...ThemeIcon.asClassNameArray(element.collapsed ? Codicon.chevronRight : Codicon.chevronDown));
+		templateData.chevron.classList.add(...ThemeIcon.asClassNameArray(element.collapsed ? Codicon.chevronRightCompact : Codicon.chevronDownCompact));
 
 		// Icon
 		templateData.icon.className = 'group-icon';
@@ -260,19 +228,6 @@ function promptTypeToIcon(type: PromptsType): ThemeIcon {
 }
 
 /**
- * Returns the icon for a given storage type.
- */
-function storageToIcon(storage: PromptsStorage): ThemeIcon {
-	switch (storage) {
-		case PromptsStorage.local: return workspaceIcon;
-		case PromptsStorage.user: return userIcon;
-		case PromptsStorage.extension: return extensionIcon;
-		case PromptsStorage.plugin: return pluginIcon;
-		default: return instructionsIcon;
-	}
-}
-
-/**
  * Formats a name for display by stripping a trailing .md extension.
  * Names from frontmatter headers are shown as-is to stay consistent
  * with how they appear in agent dropdowns and error messages.
@@ -282,27 +237,22 @@ export function formatDisplayName(name: string): string {
 }
 
 /**
- * Well-known agent instruction filenames that are always loaded and
- * grouped under "Agent Instructions" rather than classified by `applyTo`.
- */
-const AGENT_INSTRUCTION_FILENAMES = new Set([
-	AGENT_MD_FILENAME.toLowerCase(),
-	CLAUDE_MD_FILENAME.toLowerCase(),
-	CLAUDE_LOCAL_MD_FILENAME.toLowerCase(),
-	COPILOT_CUSTOM_INSTRUCTIONS_FILENAME.toLowerCase(),
-]);
-
-function isAgentInstructionFile(uri: URI): boolean {
-	return AGENT_INSTRUCTION_FILENAMES.has(basename(uri).toLowerCase());
-}
-
-/**
  * Renderer for AI customization list items.
  */
 class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICustomizationItemTemplateData> {
 	readonly templateId = 'aiCustomizationItem';
 
+	/**
+	 * Live (non-disposed) templates. Used to keep only the focused row's
+	 * inline action bar in the document tab order so that Tab from a focused
+	 * row enters that row's actions exactly once instead of cycling through
+	 * every row's actions.
+	 */
+	private readonly templates = new Set<IAICustomizationItemTemplateData>();
+	private focusedIndex = -1;
+
 	constructor(
+		private readonly showItemActions: (item: IAICustomizationListItem, anchor: HTMLElement) => void,
 		@IHoverService private readonly hoverService: IHoverService,
 		@ILabelService private readonly labelService: ILabelService,
 		@IMenuService private readonly menuService: IMenuService,
@@ -310,6 +260,21 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IAgentPluginService private readonly agentPluginService: IAgentPluginService,
 	) { }
+
+	/**
+	 * Tell the renderer which row index is currently focused in the list.
+	 * The action bar of that row (and only that row) is made tab-focusable.
+	 * Pass -1 to clear focus; in that case all action bars are made non-focusable.
+	 */
+	setFocusedIndex(index: number): void {
+		this.focusedIndex = index;
+		for (const template of this.templates) {
+			// Guard against the -1 === -1 case where unbound/recycled templates
+			// (whose currentIndex was reset by disposeElement) would otherwise be
+			// made tab-focusable when no row has focus.
+			template.actionBar.setFocusable(index !== -1 && template.currentIndex === index);
+		}
+	}
 
 	renderTemplate(container: HTMLElement): IAICustomizationItemTemplateData {
 		const disposables = new DisposableStore();
@@ -323,6 +288,7 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		const nameRow = DOM.append(textContainer, $('.item-name-row'));
 		const nameLabel = disposables.add(new HighlightedLabel(DOM.append(nameRow, $('.item-name'))));
 		const badge = DOM.append(nameRow, $('.inline-badge.item-badge'));
+		const statusIcon = DOM.append(nameRow, $('.item-status-icon'));
 		const description = disposables.add(new HighlightedLabel(DOM.append(textContainer, $('.item-description'))));
 
 		// Right section for actions (hover-visible)
@@ -330,22 +296,33 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		const actionBar = disposables.add(new ActionBar(actionsContainer, {
 			actionViewItemProvider: createActionViewItem.bind(undefined, this.instantiationService),
 		}));
+		// Keep the inline actions out of the document tab order by default. Only the
+		// focused row's action bar is made tab-focusable (see `setFocusedIndex`),
+		// so Tab from a focused row enters that row's actions exactly once instead
+		// of cycling through every row's actions.
+		actionBar.setFocusable(false);
 
-		return {
+		const template: IAICustomizationItemTemplateData = {
 			container,
 			actionsContainer,
 			actionBar,
 			typeIcon,
 			nameLabel,
 			badge,
+			statusIcon,
 			description,
 			disposables,
 			elementDisposables,
+			currentIndex: -1,
 		};
+		this.templates.add(template);
+		return template;
 	}
 
 	renderElement(entry: IFileItemEntry, index: number, templateData: IAICustomizationItemTemplateData): void {
 		templateData.elementDisposables.clear();
+		templateData.currentIndex = index;
+		templateData.actionBar.setFocusable(this.focusedIndex !== -1 && index === this.focusedIndex);
 		const element = entry.item;
 
 		// Type icon: use per-item override or fall back to prompt type
@@ -357,10 +334,10 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 			let content: string;
 			if (element.isBuiltin) {
 				content = `${element.name}\n${localize('builtinSource', "Built-in")}`;
-			} else if (element.extensionLabel) {
-				content = `${element.name}\n${localize('fromExtension', "Extension: {0}", element.extensionLabel)}`;
+			} else if (element.extensionId) {
+				content = `${element.name}\n${localize('fromExtension', "Extension: {0}", element.extensionId)}`;
 			} else {
-				const isWorkspaceItem = element.storage === PromptsStorage.local;
+				const isWorkspaceItem = element.source === AICustomizationSources.local;
 				const uriLabel = this.labelService.getUriLabel(element.uri, { relative: isWorkspaceItem });
 				content = `${element.name}\n${uriLabel}`;
 			}
@@ -388,7 +365,7 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		templateData.nameLabel.set(displayName, element.nameMatches);
 
 		// Optional inline badge (e.g. "always added", "*.ts")
-		if (element.badge) {
+		if (element.badge && element.promptType !== PromptsType.instructions) {
 			templateData.badge.textContent = element.badge;
 			templateData.badge.style.display = '';
 			if (element.badgeTooltip) {
@@ -401,6 +378,38 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		} else {
 			templateData.badge.textContent = '';
 			templateData.badge.style.display = 'none';
+		}
+
+		// Status icon for external items with sync/loading status
+		const hideLoadedStatus = element.status === 'loaded'
+			&& (element.promptType === PromptsType.agent || element.promptType === PromptsType.skill || element.promptType === PromptsType.instructions);
+		if (element.status && !hideLoadedStatus) {
+			templateData.statusIcon.style.display = '';
+			templateData.statusIcon.className = 'item-status-icon';
+			switch (element.status) {
+				case 'loading':
+					templateData.statusIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.loading), 'codicon-modifier-spin');
+					break;
+				case 'loaded':
+					templateData.statusIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.check));
+					break;
+				case 'degraded':
+					templateData.statusIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.warning));
+					break;
+				case 'error':
+					templateData.statusIcon.classList.add(...ThemeIcon.asClassNameArray(Codicon.error));
+					break;
+			}
+			if (element.statusMessage) {
+				templateData.elementDisposables.add(this.hoverService.setupManagedHover(
+					getDefaultHoverDelegate('mouse'),
+					templateData.statusIcon,
+					element.statusMessage,
+				));
+			}
+		} else {
+			templateData.statusIcon.style.display = 'none';
+			templateData.statusIcon.className = 'item-status-icon';
 		}
 
 		// Hooks show shell commands here, so keep the full text instead of truncating to the first sentence.
@@ -440,8 +449,9 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 			uri: element.uri.toString(),
 			name: element.name,
 			promptType: element.promptType,
-			storage: element.storage,
+			source: element.source,
 			pluginUri: element.pluginUri?.toString(),
+			itemId: element.id,
 		};
 
 		// Create scoped context key service with item-specific keys for when-clause filtering
@@ -450,8 +460,8 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 			[AI_CUSTOMIZATION_ITEM_URI_KEY, element.uri.toString()],
 			[AI_CUSTOMIZATION_ITEM_DISABLED_KEY, element.disabled],
 		];
-		if (element.storage) {
-			overlayPairs.push([AI_CUSTOMIZATION_ITEM_STORAGE_KEY, element.storage]);
+		if (element.source) {
+			overlayPairs.push([AI_CUSTOMIZATION_ITEM_STORAGE_KEY, element.source]);
 		}
 		if (element.pluginUri) {
 			overlayPairs.push([AI_CUSTOMIZATION_ITEM_PLUGIN_URI_KEY, element.pluginUri.toString()]);
@@ -459,14 +469,25 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		const overlay = this.contextKeyService.createOverlay(overlayPairs);
 
 		const menu = templateData.elementDisposables.add(
-			this.menuService.createMenu(AICustomizationManagementItemMenuId, overlay)
+			this.menuService.createMenu(getAICustomizationManagementItemMenuId(element.uri), overlay)
 		);
 
 		const updateActions = () => {
-			const actions = menu.getActions({ arg: context, shouldForwardArgs: true });
-			const { primary } = getContextMenuActions(actions, 'inline');
 			templateData.actionBar.clear();
-			templateData.actionBar.push(primary, { icon: true, label: false });
+			if (element.promptType === PromptsType.agent || element.promptType === PromptsType.skill || element.promptType === PromptsType.instructions) {
+				const moreAction = templateData.elementDisposables.add(new Action(
+					'aiCustomization.moreActions',
+					localize('customizationMoreActionsAria', "More actions for {0}", displayName),
+					ThemeIcon.asClassName(Codicon.ellipsis),
+					true,
+					() => this.showItemActions(element, templateData.actionsContainer),
+				));
+				templateData.actionBar.push(moreAction, { icon: true, label: false });
+			} else {
+				const actions = menu.getActions({ arg: context, shouldForwardArgs: true });
+				const { primary } = getContextMenuActions(actions, 'inline');
+				templateData.actionBar.push(primary, { icon: true, label: false });
+			}
 		};
 		updateActions();
 		templateData.elementDisposables.add(menu.onDidChange(updateActions));
@@ -474,28 +495,105 @@ class AICustomizationItemRenderer implements IListRenderer<IFileItemEntry, IAICu
 		templateData.actionBar.context = context;
 	}
 
+	disposeElement(_entry: IFileItemEntry, _index: number, templateData: IAICustomizationItemTemplateData): void {
+		templateData.currentIndex = -1;
+	}
+
 	disposeTemplate(templateData: IAICustomizationItemTemplateData): void {
+		this.templates.delete(templateData);
 		templateData.elementDisposables.dispose();
 		templateData.disposables.dispose();
 	}
 }
 
 /**
- * Maps section ID to prompt type.
+ * Maps a UI section to the items-model section, or `undefined` if the
+ * section isn't sourced from the customization harness pipeline (e.g.
+ * MCP Servers, Plugins, Models — those have their own services).
  */
-export function sectionToPromptType(section: AICustomizationManagementSection): PromptsType {
+function toItemsModelSection(section: AICustomizationManagementSection): ItemsModelSection | undefined {
 	switch (section) {
 		case AICustomizationManagementSection.Agents:
-			return PromptsType.agent;
 		case AICustomizationManagementSection.Skills:
-			return PromptsType.skill;
 		case AICustomizationManagementSection.Instructions:
-			return PromptsType.instructions;
+		case AICustomizationManagementSection.Prompts:
 		case AICustomizationManagementSection.Hooks:
-			return PromptsType.hook;
+			return section;
+		default:
+			return undefined;
+	}
+}
+
+export function usesCustomizationCardLayout(section: AICustomizationManagementSection): boolean {
+	return section === AICustomizationManagementSection.Agents
+		|| section === AICustomizationManagementSection.Skills
+		|| section === AICustomizationManagementSection.Instructions
+		|| section === AICustomizationManagementSection.Hooks
+		|| section === AICustomizationManagementSection.Prompts;
+}
+
+export function getAlwaysVisibleCustomizationGroupKeys(section: AICustomizationManagementSection, isFiltering: boolean): readonly string[] {
+	return usesCustomizationCardLayout(section) && !isFiltering
+		? [PromptsStorage.local, PromptsStorage.user]
+		: [];
+}
+
+export function getTargetedCreateActionLabel(label: string, compactLabel?: string): string {
+	return compactLabel ?? label.replace(/^\$\([^)]+\)\s*/, '');
+}
+
+/**
+ * Returns the ARIA status announcement string for a given section, item
+ * count, and whether a search filter is active. Exported for testing.
+ */
+export function getCountAnnouncement(section: AICustomizationManagementSection, count: number, isFiltering: boolean): string {
+	switch (section) {
+		case AICustomizationManagementSection.Agents:
+			if (isFiltering) {
+				if (count === 0) { return localize('countAgentsNoResults', "No agents found"); }
+				if (count === 1) { return localize('countAgentsOneResult', "1 agent found"); }
+				return localize('countAgentsResults', "{0} agents found", count);
+			}
+			if (count === 0) { return localize('countAgentsNone', "No agents"); }
+			if (count === 1) { return localize('countAgentsOne', "1 agent"); }
+			return localize('countAgents', "{0} agents", count);
+		case AICustomizationManagementSection.Skills:
+			if (isFiltering) {
+				if (count === 0) { return localize('countSkillsNoResults', "No skills found"); }
+				if (count === 1) { return localize('countSkillsOneResult', "1 skill found"); }
+				return localize('countSkillsResults', "{0} skills found", count);
+			}
+			if (count === 0) { return localize('countSkillsNone', "No skills"); }
+			if (count === 1) { return localize('countSkillsOne', "1 skill"); }
+			return localize('countSkills', "{0} skills", count);
+		case AICustomizationManagementSection.Instructions:
+			if (isFiltering) {
+				if (count === 0) { return localize('countInstructionsNoResults', "No instructions found"); }
+				if (count === 1) { return localize('countInstructionsOneResult', "1 instruction file found"); }
+				return localize('countInstructionsResults', "{0} instruction files found", count);
+			}
+			if (count === 0) { return localize('countInstructionsNone', "No instructions"); }
+			if (count === 1) { return localize('countInstructionsOne', "1 instruction file"); }
+			return localize('countInstructions', "{0} instruction files", count);
+		case AICustomizationManagementSection.Hooks:
+			if (isFiltering) {
+				if (count === 0) { return localize('countHooksNoResults', "No hooks found"); }
+				if (count === 1) { return localize('countHooksOneResult', "1 hook found"); }
+				return localize('countHooksResults', "{0} hooks found", count);
+			}
+			if (count === 0) { return localize('countHooksNone', "No hooks"); }
+			if (count === 1) { return localize('countHooksOne', "1 hook"); }
+			return localize('countHooks', "{0} hooks", count);
 		case AICustomizationManagementSection.Prompts:
 		default:
-			return PromptsType.prompt;
+			if (isFiltering) {
+				if (count === 0) { return localize('countPromptsNoResults', "No prompts found"); }
+				if (count === 1) { return localize('countPromptsOneResult', "1 prompt found"); }
+				return localize('countPromptsResults', "{0} prompts found", count);
+			}
+			if (count === 0) { return localize('countPromptsNone', "No prompts"); }
+			if (count === 1) { return localize('countPromptsOne', "1 prompt"); }
+			return localize('countPrompts', "{0} prompts", count);
 	}
 }
 
@@ -504,20 +602,56 @@ export function sectionToPromptType(section: AICustomizationManagementSection): 
  */
 interface ICreateAction {
 	readonly label: string;
+	readonly compactLabel?: string;
 	readonly enabled: boolean;
 	readonly tooltip?: string;
+	readonly kind?: 'generate';
+	readonly target?: 'workspace' | 'user';
 	run(): void;
+}
+
+interface ICustomizationItemGroup {
+	readonly groupKey: string;
+	readonly label: string;
+	readonly icon: ThemeIcon;
+	readonly description: string;
+	readonly items: IAICustomizationListItem[];
 }
 
 /**
  * Widget that displays a searchable list of AI customization items.
  */
+export function getCollapsedCustomizationGroupKey(section: AICustomizationManagementSection, groupKey: string): string {
+	return `${section}:${groupKey}`;
+}
+
+export function getCustomizationItemStatusLabel(item: IAICustomizationListItem): string | undefined {
+	switch (item.status) {
+		case 'loading': return localize('customizationStatusLoading', "Loading");
+		case 'loaded': return localize('customizationStatusLoaded', "Loaded");
+		case 'degraded': return localize('customizationStatusDegraded', "Needs attention");
+		case 'error': return localize('customizationStatusError', "Error");
+		default: return undefined;
+	}
+}
+
+export function getCustomizationItemAriaLabel(item: IAICustomizationListItem): string {
+	const displayName = item.displayName ?? formatDisplayName(item.name);
+	const secondaryText = getCustomizationSecondaryText(item.description, item.filename, item.promptType);
+	const statusLabel = getCustomizationItemStatusLabel(item);
+	const accessibleSecondaryText = [secondaryText, statusLabel, item.statusMessage].filter(Boolean).join('. ');
+	const nameAndDescription = accessibleSecondaryText ? localize('itemAriaLabel', "{0}. {1}", displayName, accessibleSecondaryText) : displayName;
+	return item.disabled ? localize('itemAriaLabelDisabled', "{0}, disabled", nameAndDescription) : nameAndDescription;
+}
+
 export class AICustomizationListWidget extends Disposable {
 
 	readonly element: HTMLElement;
 
-	private sectionHeader!: HTMLElement;
-	private sectionDescription!: HTMLElement;
+	private sectionTitleHeader!: HTMLElement;
+	private sectionTitle!: HTMLElement;
+	private sectionTitleDescription!: HTMLElement;
+	private sectionTitleDescriptionText!: HTMLElement;
 	private sectionLink!: HTMLAnchorElement;
 	private searchAndButtonContainer!: HTMLElement;
 	private searchContainer!: HTMLElement;
@@ -527,19 +661,44 @@ export class AICustomizationListWidget extends Disposable {
 	private addButtonSimple!: Button;
 	private listContainer!: HTMLElement;
 	private list!: WorkbenchList<IListEntry>;
+	private cardContainer!: HTMLElement;
+	private cardScrollable!: DomScrollableElement;
+	private cardScrollableNode!: HTMLElement;
+	private cardSectionLayoutContainer: HTMLElement | undefined;
+	private cardSectionLists: ICustomizationSectionList[] = [];
+	private firstCardFocusElement: HTMLElement | undefined;
+	private readonly cardRowsByUri = new Map<string, HTMLElement>();
+	private readonly cardRowsById = new Map<string, HTMLElement>();
+	private readonly cardMenuButtonsById = new Map<string, HTMLElement>();
+	private cardMenuOpen = false;
+	private lastCardFocusItemId: string | undefined;
 	private emptyStateContainer!: HTMLElement;
-	private emptyStateIcon!: HTMLElement;
 	private emptyStateText!: HTMLElement;
 	private emptyStateSubtext!: HTMLElement;
 
 	private currentSection: AICustomizationManagementSection = AICustomizationManagementSection.Agents;
-	private allItems: IAICustomizationListItem[] = [];
+	private allItems: readonly IAICustomizationListItem[] = [];
 	private displayEntries: IListEntry[] = [];
 	private searchQuery: string = '';
+	private sectionLoading = false;
 	private readonly collapsedGroups = new Set<string>();
+	private _layoutDeferred = false;
+	private readonly revealLastItemScheduler = this._register(new MutableDisposable());
+	private lastLayoutWidth = 0;
+	private lastLayoutHeight = 0;
+	private lastHeaderHeight = 0;
 	private readonly dropdownActionDisposables = this._register(new DisposableStore());
+	private readonly cardDisposables = this._register(new DisposableStore());
+	private readonly pendingCardSectionLayout = this._register(new MutableDisposable());
+	private readonly cardSectionScrollPositions = new Map<string, number>();
+
+	/** Monotonically increasing counter; guards the post-load announcement against stale calls. */
+	private _sectionLoadId = 0;
 
 	private readonly delayedFilter = new Delayer<void>(200);
+
+	/** Subscription to the items model for the current section; refreshed on setSection. */
+	private readonly currentSectionSubscription = this._register(new MutableDisposable());
 
 	private readonly _onDidSelectItem = this._register(new Emitter<IAICustomizationListItem>());
 	readonly onDidSelectItem: Event<IAICustomizationListItem> = this._onDidSelectItem.event;
@@ -550,8 +709,8 @@ export class AICustomizationListWidget extends Disposable {
 	private readonly _onDidRequestCreate = this._register(new Emitter<PromptsType>());
 	readonly onDidRequestCreate: Event<PromptsType> = this._onDidRequestCreate.event;
 
-	private readonly _onDidRequestCreateManual = this._register(new Emitter<{ type: PromptsType; target: 'workspace' | 'user' | 'workspace-root'; rootFileName?: string }>());
-	readonly onDidRequestCreateManual: Event<{ type: PromptsType; target: 'workspace' | 'user' | 'workspace-root'; rootFileName?: string }> = this._onDidRequestCreateManual.event;
+	private readonly _onDidRequestCreateManual = this._register(new Emitter<{ type: PromptsType; target: 'local' | 'user' | 'workspace-root'; rootFileName?: string }>());
+	readonly onDidRequestCreateManual: Event<{ type: PromptsType; target: 'local' | 'user' | 'workspace-root'; rootFileName?: string }> = this._onDidRequestCreateManual.event;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -561,59 +720,76 @@ export class AICustomizationListWidget extends Disposable {
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IMenuService private readonly menuService: IMenuService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
-		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@ILabelService private readonly labelService: ILabelService,
 		@IAICustomizationWorkspaceService private readonly workspaceService: IAICustomizationWorkspaceService,
 		@IClipboardService private readonly clipboardService: IClipboardService,
 		@IHoverService private readonly hoverService: IHoverService,
 		@IFileService private readonly fileService: IFileService,
-		@IPathService private readonly pathService: IPathService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@ICustomizationHarnessService private readonly harnessService: ICustomizationHarnessService,
-		@IAgentPluginService private readonly agentPluginService: IAgentPluginService,
 		@ICommandService private readonly commandService: ICommandService,
-		@IProductService private readonly productService: IProductService,
-		@IUserDataProfileService private readonly userDataProfileService: IUserDataProfileService,
+		@IAICustomizationItemsModel private readonly itemsModel: IAICustomizationItemsModel,
+		@IAgentPluginService private readonly agentPluginService: IAgentPluginService,
 	) {
 		super();
-		this.element = $('.ai-customization-list-widget');
+		this.element = $('.ai-customization-list-widget.plugin-list-widget');
 		this.create();
 
-		this._register(this.workspaceContextService.onDidChangeWorkspaceFolders(() => this.refresh()));
+		// Re-render the add button when the active project root or harness changes.
+		// Item discovery itself is owned by the items model; we just rebind the
+		// per-section subscription so the UI follows whichever harness is active.
 		this._register(autorun(reader => {
 			this.workspaceService.activeProjectRoot.read(reader);
 			this.updateAddButton();
-			this.refresh();
 		}));
-
-		// Re-filter when the active harness changes
 		this._register(autorun(reader => {
 			this.harnessService.activeHarness.read(reader);
-			this.updateAddButton();
-			this.refresh();
-		}));
-
-		// Refresh when available harnesses change (external provider registered/unregistered)
-		this._register(autorun(reader => {
 			this.harnessService.availableHarnesses.read(reader);
-			this.refresh();
+			this.updateAddButton();
 		}));
-
-		// Subscribe to the active provider's onDidChange event
-		const providerChangeDisposable = this._register(new MutableDisposable());
-		this._register(autorun(reader => {
-			this.harnessService.activeHarness.read(reader);
-			const activeDescriptor = this.harnessService.getActiveDescriptor();
-			if (activeDescriptor.itemProvider) {
-				providerChangeDisposable.value = activeDescriptor.itemProvider.onDidChange(() => this.refresh());
-			} else {
-				providerChangeDisposable.clear();
-			}
-		}));
-
 	}
 
 	private create(): void {
+		// Section title header (title + description with inline learn more) at the top.
+		this.sectionTitleHeader = DOM.append(this.element, $('.section-title-header'));
+		const titleRow = DOM.append(this.sectionTitleHeader, $('.section-title-row'));
+		this.sectionTitle = DOM.append(titleRow, $('h2.section-title'));
+		this.sectionTitleDescription = DOM.append(this.sectionTitleHeader, $('p.section-title-description'));
+		this.sectionTitleDescriptionText = DOM.append(this.sectionTitleDescription, $('span.section-title-description-text'));
+		// Real whitespace text node between description and link so the gap collapses
+		// when the link wraps to a new line (a CSS margin-left would push it inward).
+		this.sectionTitleDescription.appendChild(document.createTextNode(' '));
+		this.sectionLink = DOM.append(this.sectionTitleDescription, $('a.section-title-link')) as HTMLAnchorElement;
+		this._register(DOM.addDisposableListener(this.sectionLink, 'click', (e) => {
+			e.preventDefault();
+			const href = this.sectionLink.href;
+			if (href) {
+				this.openerService.open(URI.parse(href));
+			}
+		}));
+
+		// Re-layout when the header height changes (e.g. description wraps,
+		// or CSS adjustments alter padding) so the list's allotted height stays
+		// in sync with the actual on-screen header size. Only relayout when the
+		// header height actually changed to avoid redundant work on DPR changes
+		// or width-only resizes.
+		const targetWindow = DOM.getWindow(this.element);
+		const headerObserver = this._register(new DOM.DisposableResizeObserver(
+			'AICustomizationListWidget.sectionTitleHeader',
+			() => {
+				if (this.lastLayoutWidth <= 0 || this.lastLayoutHeight <= 0) {
+					return;
+				}
+				const headerHeight = this.sectionTitleHeader.offsetHeight;
+				if (headerHeight === this.lastHeaderHeight) {
+					return;
+				}
+				this.layout(this.lastLayoutHeight, this.lastLayoutWidth);
+			},
+			targetWindow,
+		));
+		this._register(headerObserver.observe(this.sectionTitleHeader));
+
 		// Search and button container
 		this.searchAndButtonContainer = DOM.append(this.element, $('.list-search-and-button-container'));
 
@@ -628,6 +804,7 @@ export class AICustomizationListWidget extends Disposable {
 			this.searchQuery = this.searchInput.value;
 			this.delayedFilter.trigger(() => {
 				const matchCount = this.filterItems();
+				this.announceItemCount(matchCount);
 				if (this.searchQuery.trim()) {
 					this.telemetryService.publicLog2<CustomizationEditorSearchEvent, CustomizationEditorSearchClassification>('chatCustomizationEditor.search', {
 						section: this.currentSection,
@@ -643,7 +820,6 @@ export class AICustomizationListWidget extends Disposable {
 		// Simple button (for single-action case, no dropdown)
 		this.addButtonSimple = this._register(new Button(this.addButtonContainer, {
 			...defaultButtonStyles,
-			supportIcons: true,
 		}));
 		this.addButtonSimple.element.classList.add('list-add-button');
 		this._register(this.addButtonSimple.onDidClick(() => this.executePrimaryCreateAction()));
@@ -651,14 +827,31 @@ export class AICustomizationListWidget extends Disposable {
 		// Button with dropdown (for multi-action case)
 		this.addButton = this._register(new ButtonWithDropdown(this.addButtonContainer, {
 			...defaultButtonStyles,
-			supportIcons: true,
 			contextMenuProvider: this.contextMenuService,
 			addPrimaryActionToDropdown: false,
 			actions: { getActions: () => this.getDropdownActions() },
 		}));
 		this.addButton.element.classList.add('list-add-button');
 		this._register(this.addButton.onDidClick(() => this.executePrimaryCreateAction()));
-		this.updateAddButton();
+
+		this.cardContainer = DOM.append(this.element, $('.plugin-card-container.customization-card-container'));
+		this.cardScrollable = this._register(new DomScrollableElement(this.cardContainer, {
+			horizontal: ScrollbarVisibility.Hidden,
+			vertical: ScrollbarVisibility.Auto,
+			useShadows: false,
+		}));
+		this._register(DOM.addDisposableListener(this.cardContainer, DOM.EventType.SCROLL, () => {
+			this.cardScrollable.setScrollPosition({ scrollTop: this.cardContainer.scrollTop });
+		}));
+		this.cardScrollableNode = this.cardScrollable.getDomNode();
+		this.cardScrollableNode.classList.add('plugin-card-scrollable');
+		this.cardScrollableNode.style.display = 'none';
+		this.element.appendChild(this.cardScrollableNode);
+		const cardResizeObserver = this._register(new DOM.DisposableResizeObserver(
+			'AICustomizationListWidget.cardScrollable',
+			() => this.scheduleCardSectionLayout(),
+		));
+		this._register(cardResizeObserver.observe(this.cardScrollableNode));
 
 		// List container
 		this.listContainer = DOM.append(this.element, $('.list-container'));
@@ -666,12 +859,15 @@ export class AICustomizationListWidget extends Disposable {
 		// Empty state container
 		this.emptyStateContainer = DOM.append(this.element, $('.list-empty-state'));
 		const emptyStateHeader = DOM.append(this.emptyStateContainer, $('.empty-state-header'));
-		this.emptyStateIcon = DOM.append(emptyStateHeader, $('.empty-state-icon'));
 		this.emptyStateText = DOM.append(emptyStateHeader, $('.empty-state-text'));
 		this.emptyStateSubtext = DOM.append(this.emptyStateContainer, $('.empty-state-subtext'));
 		this.emptyStateContainer.style.display = 'none';
 
 		// Create list
+		const itemRenderer = this.instantiationService.createInstance(
+			AICustomizationItemRenderer,
+			(item: IAICustomizationListItem, anchor: HTMLElement) => this.showCardItemActions(item, anchor),
+		);
 		this.list = this._register(this.instantiationService.createInstance(
 			WorkbenchList<IListEntry>,
 			'AICustomizationManagementList',
@@ -679,25 +875,25 @@ export class AICustomizationListWidget extends Disposable {
 			new AICustomizationListDelegate(),
 			[
 				new GroupHeaderRenderer(this.hoverService),
-				this.instantiationService.createInstance(AICustomizationItemRenderer),
+				itemRenderer,
 			],
 			{
 				identityProvider: {
 					getId: (entry: IListEntry) => entry.type === 'group-header' ? entry.id : entry.item.id,
+					getGroupId: (entry: IListEntry) => entry.type === 'group-header' ? NotSelectableGroupId : 0,
 				},
 				accessibilityProvider: {
 					getAriaLabel: (entry: IListEntry) => {
 						if (entry.type === 'group-header') {
 							return localize('groupAriaLabel', "{0}, {1} items, {2}", entry.label, entry.count, entry.collapsed ? localize('collapsed', "collapsed") : localize('expanded', "expanded"));
 						}
-						const nameAndDesc = entry.item.description
-							? localize('itemAriaLabel', "{0}, {1}", entry.item.name, entry.item.description)
-							: entry.item.name;
-						return entry.item.disabled
-							? localize('itemAriaLabelDisabled', "{0}, disabled", nameAndDesc)
-							: nameAndDesc;
+						const label = getCustomizationItemAriaLabel(entry.item);
+						if (!hasReadableCustomizationContent(entry.item.uri)) {
+							return localize('itemAriaLabelNoSourceContent', "{0}, source content unavailable", label);
+						}
+						return label;
 					},
-					getWidgetAriaLabel: () => localize('listAriaLabel', "Chat Customizations"),
+					getWidgetAriaLabel: () => localize('listAriaLabel', "Agent Customizations"),
 				},
 				keyboardNavigationLabelProvider: {
 					getKeyboardNavigationLabel: (entry: IListEntry) => entry.type === 'group-header' ? entry.label : entry.item.name,
@@ -713,18 +909,40 @@ export class AICustomizationListWidget extends Disposable {
 				if (e.element.type === 'group-header') {
 					this.toggleGroup(e.element);
 				} else {
-					this._onDidSelectItem.fire(e.element.item);
+					if (hasReadableCustomizationContent(e.element.item.uri)) {
+						this._onDidSelectItem.fire(e.element.item);
+					}
 				}
 			}
 		}));
 
-		// Handle context menu
-		this._register(this.list.onContextMenu(e => this.onContextMenu(e)));
+		// Keep only the focused row's inline action bar in the document tab order
+		// so Tab from a focused row enters that row's actions exactly once instead
+		// of cycling through the action bar of every rendered row.
+		this._register(this.list.onDidChangeFocus(e => {
+			itemRenderer.setFocusedIndex(e.indexes.length ? e.indexes[0] : -1);
+		}));
 
-		// Subscribe to prompt service changes
-		this._register(this.promptsService.onDidChangeCustomAgents(() => this.refresh()));
-		this._register(this.promptsService.onDidChangeSlashCommands(() => this.refresh()));
-		this._register(this.promptsService.onDidChangeSkills(() => this.refresh()));
+		// When the list itself receives DOM focus (e.g. via Tab) and no row is
+		// focused yet, focus the first selectable item (skipping group headers)
+		// so the focus indicator is visible instead of requiring the user to
+		// press an arrow key first.
+		this._register(this.list.onDidFocus(() => {
+			if (this.list.getFocus().length === 0 && this.displayEntries.length > 0) {
+				const firstItemIndex = this.displayEntries.findIndex(e => e.type !== 'group-header');
+				if (firstItemIndex >= 0) {
+					this.list.setFocus([firstItemIndex]);
+				}
+			}
+		}));
+
+		// Prompts retain their existing list context menu. The redesigned sections
+		// expose all row actions through an explicit overflow button.
+		this._register(this.list.onContextMenu(e => {
+			if (!this.usesCardLayout()) {
+				this.onContextMenu(e);
+			}
+		}));
 
 		// Refresh on file deletions so the list updates after inline delete actions
 		this._register(this.fileService.onDidFilesChange(e => {
@@ -733,18 +951,8 @@ export class AICustomizationListWidget extends Disposable {
 			}
 		}));
 
-		// Section footer at bottom with description and link
-		this.sectionHeader = DOM.append(this.element, $('.section-footer'));
-		this.sectionDescription = DOM.append(this.sectionHeader, $('p.section-footer-description'));
-		this.sectionLink = DOM.append(this.sectionHeader, $('a.section-footer-link')) as HTMLAnchorElement;
-		this._register(DOM.addDisposableListener(this.sectionLink, 'click', (e) => {
-			e.preventDefault();
-			const href = this.sectionLink.href;
-			if (href) {
-				this.openerService.open(URI.parse(href));
-			}
-		}));
 		this.updateSectionHeader();
+		this.updateAddButton();
 	}
 
 	/**
@@ -762,8 +970,9 @@ export class AICustomizationListWidget extends Disposable {
 			uri: item.uri.toString(),
 			name: item.name,
 			promptType: item.promptType,
-			storage: item.storage,
+			source: item.source,
 			pluginUri: item.pluginUri?.toString(),
+			itemId: item.id,
 		};
 
 		// Create scoped context key service with item-specific keys for when-clause filtering
@@ -772,8 +981,8 @@ export class AICustomizationListWidget extends Disposable {
 			[AI_CUSTOMIZATION_ITEM_URI_KEY, item.uri.toString()],
 			[AI_CUSTOMIZATION_ITEM_DISABLED_KEY, item.disabled],
 		];
-		if (item.storage) {
-			overlayPairs.push([AI_CUSTOMIZATION_ITEM_STORAGE_KEY, item.storage]);
+		if (item.source) {
+			overlayPairs.push([AI_CUSTOMIZATION_ITEM_STORAGE_KEY, item.source]);
 		}
 		if (item.pluginUri) {
 			overlayPairs.push([AI_CUSTOMIZATION_ITEM_PLUGIN_URI_KEY, item.pluginUri.toString()]);
@@ -781,7 +990,7 @@ export class AICustomizationListWidget extends Disposable {
 		const overlay = this.contextKeyService.createOverlay(overlayPairs);
 
 		// Get menu actions, excluding inline actions to avoid duplicates
-		const actions = this.menuService.getMenuActions(AICustomizationManagementItemMenuId, overlay, {
+		const actions = this.menuService.getMenuActions(getAICustomizationManagementItemMenuId(item.uri), overlay, {
 			arg: context,
 			shouldForwardArgs: true,
 		});
@@ -789,7 +998,7 @@ export class AICustomizationListWidget extends Disposable {
 		const { secondary } = getContextMenuActions(actions, 'inline');
 
 		// Add copy path actions (not shown for built-in items where the path is an implementation detail)
-		const copyActions = item.isBuiltin ? [] : [
+		const copyActions = item.isBuiltin || !hasReadableCustomizationContent(item.uri) ? [] : [
 			new Separator(),
 			new Action('copyFullPath', localize('copyFullPath', "Copy Full Path"), undefined, true, async () => {
 				await this.clipboardService.writeText(item.uri.fsPath);
@@ -813,52 +1022,182 @@ export class AICustomizationListWidget extends Disposable {
 		});
 	}
 
+	private showCardItemActions(item: IAICustomizationListItem, anchor: HTMLElement): void {
+		this.cardMenuOpen = true;
+		this.lastCardFocusItemId = item.id;
+		const disposables = new DisposableStore();
+		const context: Record<string, unknown> = {
+			uri: item.uri.toString(),
+			name: item.name,
+			promptType: item.promptType,
+			source: item.source,
+			pluginUri: item.pluginUri?.toString(),
+			itemId: item.id,
+		};
+		const menu = disposables.add(this.createCardItemMenu(item));
+		const groups = menu.getActions({ arg: context, shouldForwardArgs: true });
+		const actions: IAction[] = [];
+		const addedActionIds = new Set<string>();
+		for (const [, groupActions] of groups) {
+			const uniqueGroupActions = groupActions.filter(action => {
+				if (addedActionIds.has(action.id)) {
+					return false;
+				}
+				addedActionIds.add(action.id);
+				return true;
+			});
+			if (uniqueGroupActions.length === 0) {
+				continue;
+			}
+			if (actions.length > 0) {
+				actions.push(new Separator());
+			}
+			actions.push(...uniqueGroupActions);
+		}
+		if (!item.isBuiltin && hasReadableCustomizationContent(item.uri)) {
+			if (actions.length > 0) {
+				actions.push(new Separator());
+			}
+			actions.push(disposables.add(new Action('copyRelativePath', localize('copyRelativePath', "Copy Relative Path"), undefined, true, async () => {
+				const basePath = this.workspaceService.getActiveProjectRoot();
+				const relativePath = basePath && item.uri.fsPath.startsWith(basePath.fsPath)
+					? item.uri.fsPath.substring(basePath.fsPath.length + 1)
+					: this.labelService.getUriLabel(item.uri, { relative: true });
+				await this.clipboardService.writeText(relativePath);
+			})));
+		}
+		if (actions.length === 0) {
+			this.cardMenuOpen = false;
+			disposables.dispose();
+			return;
+		}
+		this.contextMenuService.showContextMenu({
+			getAnchor: () => anchor,
+			getActions: () => actions,
+			onHide: () => {
+				this.cardMenuOpen = false;
+				if (!this.focusCardSectionItem(item.id)) {
+					(this.cardMenuButtonsById.get(item.id) ?? this.cardRowsById.get(item.id) ?? this.firstCardFocusElement)?.focus();
+				}
+				disposables.dispose();
+			},
+		});
+	}
+
+	private createCardItemMenu(item: IAICustomizationListItem): IMenu {
+		const overlayPairs: [string, string | boolean][] = [
+			[AI_CUSTOMIZATION_ITEM_TYPE_KEY, item.promptType],
+			[AI_CUSTOMIZATION_ITEM_URI_KEY, item.uri.toString()],
+			[AI_CUSTOMIZATION_ITEM_DISABLED_KEY, item.disabled],
+			[AI_CUSTOMIZATION_ITEM_STORAGE_KEY, item.source],
+		];
+		if (item.pluginUri) {
+			overlayPairs.push([AI_CUSTOMIZATION_ITEM_PLUGIN_URI_KEY, item.pluginUri.toString()]);
+		}
+		const overlay = this.contextKeyService.createOverlay(overlayPairs);
+		return this.menuService.createMenu(getAICustomizationManagementItemMenuId(item.uri), overlay);
+	}
+
+	private hasCardItemActions(item: IAICustomizationListItem): boolean {
+		if (hasReadableCustomizationContent(item.uri)) {
+			return true;
+		}
+
+		const menu = this.createCardItemMenu(item);
+		try {
+			return menu.getActions().some(([, actions]) => actions.length > 0);
+		} finally {
+			menu.dispose();
+		}
+	}
+
 	/**
-	 * Sets the current section and loads items for that section.
+	 * Sets the current section and binds the list to the model's per-section
+	 * observable. Returns once the initial fetch for the section has resolved
+	 * so that callers (e.g. tests/fixtures) can rely on rendered output
+	 * reflecting at least one fetch.
 	 */
 	async setSection(section: AICustomizationManagementSection): Promise<void> {
+		const loadId = ++this._sectionLoadId;
 		this.currentSection = section;
+		this.element.classList.toggle('plugin-list-widget', this.usesCardLayout());
 		this.updateSectionHeader();
-		await this.loadItems();
+
+		const modelSection = toItemsModelSection(section);
+		if (!modelSection) {
+			this.sectionLoading = false;
+			this.currentSectionSubscription.clear();
+			this.allItems = [];
+			const matchCount = this.filterItems();
+			this._onDidChangeItemCount.fire(0);
+			this.updateAddButton();
+			this.announceItemCount(matchCount);
+			return;
+		}
+
+		const observable = this.itemsModel.getItems(modelSection);
+		this.sectionLoading = true;
+		this.currentSectionSubscription.value = autorun(reader => {
+			const items = observable.read(reader);
+			this.allItems = items;
+			this.filterItems();
+			this._onDidChangeItemCount.fire(items.length);
+		});
 		this.updateAddButton();
+		await this.itemsModel.whenSectionLoaded(modelSection);
+		// Only announce if this is still the most recent section change; a newer
+		// setSection() call may have already taken over and will make its own
+		// announcement once its own load resolves.
+		if (loadId === this._sectionLoadId) {
+			this.sectionLoading = false;
+			this.filterItems();
+			this.announceItemCount(this.applySearchFilter(this.allItems).length);
+		}
 	}
 
 	/**
 	 * Updates the section header based on the current section.
 	 */
 	private updateSectionHeader(): void {
+		let title: string;
 		let description: string;
 		let docsUrl: string;
 		let learnMoreLabel: string;
 		switch (this.currentSection) {
 			case AICustomizationManagementSection.Agents:
+				title = localize('agents', "Agents");
 				description = localize('agentsDescription', "Configure the AI to adopt different personas tailored to specific development tasks. Each agent has its own instructions, tools, and behavior.");
-				docsUrl = 'https://code.visualstudio.com/docs/copilot/customization/custom-agents';
+				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/custom-agents?referrer=in-product';
 				learnMoreLabel = localize('learnMoreAgents', "Learn more about custom agents");
 				break;
 			case AICustomizationManagementSection.Skills:
+				title = localize('skills', "Skills");
 				description = localize('skillsDescription', "Folders of instructions, scripts, and resources that Copilot loads when relevant to perform specialized tasks.");
-				docsUrl = 'https://code.visualstudio.com/docs/copilot/customization/agent-skills';
+				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/agent-skills?referrer=in-product';
 				learnMoreLabel = localize('learnMoreSkills', "Learn more about agent skills");
 				break;
 			case AICustomizationManagementSection.Instructions:
+				title = localize('instructions', "Instructions");
 				description = localize('instructionsDescription', "Define common guidelines and rules that automatically influence how AI generates code and handles development tasks.");
-				docsUrl = 'https://code.visualstudio.com/docs/copilot/customization/custom-instructions';
+				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/custom-instructions?referrer=in-product';
 				learnMoreLabel = localize('learnMoreInstructions', "Learn more about custom instructions");
 				break;
 			case AICustomizationManagementSection.Hooks:
+				title = localize('hooks', "Hooks");
 				description = localize('hooksDescription', "Prompts executed at specific points during an agentic lifecycle.");
-				docsUrl = 'https://code.visualstudio.com/docs/copilot/customization/hooks';
+				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/hooks?referrer=in-product';
 				learnMoreLabel = localize('learnMoreHooks', "Learn more about hooks");
 				break;
 			case AICustomizationManagementSection.Prompts:
 			default:
+				title = localize('prompts', "Prompts");
 				description = localize('promptsDescription', "Reusable prompts for common development tasks like generating code, performing reviews, or scaffolding components.");
-				docsUrl = 'https://code.visualstudio.com/docs/copilot/customization/prompt-files';
+				docsUrl = 'https://code.visualstudio.com/docs/agent-customization/prompt-files?referrer=in-product';
 				learnMoreLabel = localize('learnMorePrompts', "Learn more about prompt files");
 				break;
 		}
-		this.sectionDescription.textContent = description;
+		this.sectionTitle.textContent = title;
+		this.sectionTitleDescriptionText.textContent = description;
 		this.sectionLink.textContent = learnMoreLabel;
 		this.sectionLink.href = docsUrl;
 	}
@@ -868,6 +1207,15 @@ export class AICustomizationListWidget extends Disposable {
 	 * The first action becomes the primary button; the rest go in the dropdown.
 	 */
 	private updateAddButton(): void {
+		if (this.usesCardLayout()) {
+			this.addButton.element.style.display = 'none';
+			this.addButtonSimple.element.style.display = 'none';
+			if (this.allItems.length > 0 || !this.searchQuery.trim()) {
+				this.filterItems();
+			}
+			return;
+		}
+
 		const actions = this.buildCreateActions();
 		const [primary, ...dropdown] = actions;
 		const hasDropdown = dropdown.length > 0;
@@ -908,10 +1256,38 @@ export class AICustomizationListWidget extends Disposable {
 		// Full command override (e.g. Claude hooks) — single action, no dropdown
 		if (override?.commandId) {
 			return [{
-				label: `$(${Codicon.add.id}) ${override.label}`,
+				label: override.label ?? localize('newCustomization', "New {0}", typeLabel),
 				enabled: true,
 				run: () => { this.commandService.executeCommand(override.commandId!); },
 			}];
+		}
+
+		// Check for menu-contributed create actions from extensions.
+		// Extensions contribute to AICustomizationManagementCreateMenuId with
+		// when-clauses targeting chatCustomizationSessionType and
+		// chatCustomizationSection context keys.
+		// When a harness contributes create actions, they REPLACE the built-in ones
+		// for all section types, including hooks.
+		const menuActions = this.menuService.getMenuActions(
+			AICustomizationManagementCreateMenuId,
+			this.contextKeyService,
+			{ shouldForwardArgs: true },
+		);
+		const extensionCreateActions: ICreateAction[] = [];
+		for (const [, group] of menuActions) {
+			for (const menuItem of group) {
+				if (menuItem instanceof MenuItemAction) {
+					extensionCreateActions.push({
+						label: typeof menuItem.item.title === 'string' ? menuItem.item.title : menuItem.item.title.value,
+						enabled: menuItem.enabled,
+						run: () => { menuItem.run(); },
+					});
+				}
+			}
+		}
+
+		if (extensionCreateActions.length > 0) {
+			return extensionCreateActions;
 		}
 
 		const createTypeLabel = override?.typeLabel ?? typeLabel;
@@ -922,8 +1298,9 @@ export class AICustomizationListWidget extends Disposable {
 		// Without a workspace, user creation becomes primary and rootFile goes to dropdown.
 		if (override?.rootFile && hasWorkspace) {
 			actions.push({
-				label: `$(${Codicon.add.id}) ${override.label}`,
+				label: override.label ?? localize('newCustomization', "New {0}", typeLabel),
 				enabled: true,
+				target: 'workspace',
 				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace-root' }); },
 			});
 			addedTargets.add('workspace-root');
@@ -932,28 +1309,30 @@ export class AICustomizationListWidget extends Disposable {
 		// Hooks have a simplified action set
 		if (promptType === PromptsType.hook) {
 			if (!this.workspaceService.isSessionsWindow && !descriptor.hideGenerateButton) {
-				// Core Local: Generate is primary, configure hooks in dropdown
 				actions.push({
-					label: `$(${Codicon.sparkle.id}) Generate ${typeLabel}`,
+					label: localize('generateWithAI', "Generate with AI"),
+					tooltip: localize('generateCustomizationWithAI', "Generate {0} with AI", typeLabel),
 					enabled: true,
+					kind: 'generate',
 					run: () => { this._onDidRequestCreate.fire(promptType); },
 				});
-				if (hasWorkspace) {
-					actions.push({
-						label: `$(${Codicon.add.id}) Configure Hooks`,
-						enabled: true,
-						run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace' }); },
-					});
-				}
-			} else if (!override?.commandId) {
-				// Sessions / non-local: workspace creation only
+			}
+			if (hasWorkspace) {
 				actions.push({
-					label: `$(${Codicon.add.id}) New ${typeLabel} (Workspace)`,
-					enabled: hasWorkspace,
-					tooltip: hasWorkspace ? undefined : localize('createDisabled', "Open a workspace folder to create customizations."),
-					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace' }); },
+					label: localize('newHook', "New Hook"),
+					compactLabel: localize('newHook', "New Hook"),
+					enabled: true,
+					target: 'workspace',
+					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'local' }); },
 				});
 			}
+			actions.push({
+				label: localize('newHook', "New Hook"),
+				compactLabel: localize('newHook', "New Hook"),
+				enabled: true,
+				target: 'user',
+				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'user' }); },
+			});
 			return actions;
 		}
 
@@ -962,25 +1341,31 @@ export class AICustomizationListWidget extends Disposable {
 		if (!override?.rootFile) {
 			// Determine the primary action (first in list)
 			if (!this.workspaceService.isSessionsWindow && !descriptor.hideGenerateButton) {
-				// Core Local: Generate is primary
+				// Local exposes one non-storage-scoped AI generation action.
 				actions.push({
-					label: `$(${Codicon.sparkle.id}) Generate ${typeLabel}`,
+					label: localize('generateWithAI', "Generate with AI"),
+					tooltip: localize('generateCustomizationWithAI', "Generate {0} with AI", typeLabel),
 					enabled: true,
+					kind: 'generate',
 					run: () => { this._onDidRequestCreate.fire(promptType); },
 				});
 			} else if (hasWorkspace) {
 				// Sessions or non-local harness with workspace: workspace is primary
 				actions.push({
-					label: `$(${Codicon.add.id}) New ${createTypeLabel} (Workspace)`,
+					label: localize('newWorkspaceCustomization', "New {0} (Workspace)", createTypeLabel),
+					compactLabel: localize('newCustomization', "New {0}", createTypeLabel),
 					enabled: true,
-					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace' }); },
+					target: 'workspace',
+					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'local' }); },
 				});
 				addedTargets.add('workspace');
 			} else {
 				// No workspace: user is primary
 				actions.push({
-					label: `$(${Codicon.add.id}) New ${createTypeLabel} (User)`,
+					label: localize('newUserCustomization', "New {0} (User)", createTypeLabel),
+					compactLabel: localize('newCustomization', "New {0}", createTypeLabel),
 					enabled: true,
+					target: 'user',
 					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'user' }); },
 				});
 				addedTargets.add('user');
@@ -990,16 +1375,20 @@ export class AICustomizationListWidget extends Disposable {
 		// Secondary actions (dropdown) — only add if not already present
 		if (hasWorkspace && !addedTargets.has('workspace')) {
 			actions.push({
-				label: `$(${Codicon.folder.id}) New ${createTypeLabel} (Workspace)`,
+				label: localize('newWorkspaceCustomization', "New {0} (Workspace)", createTypeLabel),
+				compactLabel: localize('newCustomization', "New {0}", createTypeLabel),
 				enabled: true,
-				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace' }); },
+				target: 'workspace',
+				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'local' }); },
 			});
 		}
 
 		if (!addedTargets.has('user')) {
 			actions.push({
-				label: `$(${Codicon.account.id}) New ${createTypeLabel} (User)`,
+				label: localize('newUserCustomization', "New {0} (User)", createTypeLabel),
+				compactLabel: localize('newCustomization', "New {0}", createTypeLabel),
 				enabled: true,
+				target: 'user',
 				run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'user' }); },
 			});
 		}
@@ -1008,39 +1397,12 @@ export class AICustomizationListWidget extends Disposable {
 		if (hasWorkspace && override?.rootFileShortcuts && !addedTargets.has('workspace-root')) {
 			for (const fileName of override.rootFileShortcuts) {
 				actions.push({
-					label: `$(${Codicon.file.id}) New ${fileName}`,
+					label: localize('newCustomizationFile', "New {0}", fileName),
 					enabled: true,
+					target: 'workspace',
 					run: () => { this._onDidRequestCreateManual.fire({ type: promptType, target: 'workspace-root', rootFileName: fileName }); },
 				});
 			}
-		}
-
-		// Check for menu-contributed create actions from extensions.
-		// Extensions contribute to AICustomizationManagementCreateMenuId with
-		// when-clauses targeting aiCustomizationManagementHarness and
-		// aiCustomizationManagementSection context keys.
-		// When a harness contributes create actions, they REPLACE the built-in ones.
-		const menuActions = this.menuService.getMenuActions(
-			AICustomizationManagementCreateMenuId,
-			this.contextKeyService,
-			{ shouldForwardArgs: true },
-		);
-		const extensionCreateActions: ICreateAction[] = [];
-		for (const [, group] of menuActions) {
-			for (const menuItem of group) {
-				if (menuItem instanceof MenuItemAction) {
-					const icon = ThemeIcon.isThemeIcon(menuItem.item.icon) ? menuItem.item.icon.id : Codicon.add.id;
-					extensionCreateActions.push({
-						label: `$(${icon}) ${typeof menuItem.item.title === 'string' ? menuItem.item.title : menuItem.item.title.value}`,
-						enabled: menuItem.enabled,
-						run: () => { menuItem.run(); },
-					});
-				}
-			}
-		}
-
-		if (extensionCreateActions.length > 0) {
-			return extensionCreateActions;
 		}
 
 		return actions;
@@ -1086,7 +1448,7 @@ export class AICustomizationListWidget extends Disposable {
 			case AICustomizationManagementSection.Skills:
 				return localize('skill', "Skill");
 			case AICustomizationManagementSection.Instructions:
-				return localize('instructions', "Instructions");
+				return localize('instruction', "Instruction");
 			case AICustomizationManagementSection.Hooks:
 				return localize('hook', "Hook");
 			case AICustomizationManagementSection.Prompts:
@@ -1096,764 +1458,93 @@ export class AICustomizationListWidget extends Disposable {
 	}
 
 	/**
-	 * Refreshes the current section's items.
+	 * Announces the current number of items (after search filtering) to
+	 * screen readers via an aria status message. Called when the section
+	 * is loaded and after the search filter changes so assistive technology
+	 * users hear the count, including "no results".
 	 */
-	async refresh(): Promise<void> {
-		await this.loadItems();
-		this.updateAddButton();
+	private announceItemCount(count: number): void {
+		const isFiltering = this.searchQuery.trim().length > 0;
+		aria.status(getCountAnnouncement(this.currentSection, count, isFiltering));
 	}
 
 	/**
-	 * Loads items for the current section.
+	 * Refreshes the current section's items.
+	 *
+	 * Item discovery is owned by `IAICustomizationItemsModel`. This method
+	 * pulls the current value from the model and re-renders. Callers do not
+	 * need to invoke this in response to data change events — the per-section
+	 * autorun bound in `setSection` already does that.
 	 */
-	private async loadItems(): Promise<void> {
-		const section = this.currentSection;
-		const items = await this.fetchItemsForSection(section);
-
-		if (this.currentSection !== section) {
-			return; // section changed while loading
+	refresh(): void {
+		if (this._store.isDisposed) {
+			return;
 		}
+		this.applyItemsFromModel();
+		this.updateAddButton();
+	}
 
-		this.allItems = items;
+	private applyItemsFromModel(): void {
+		const section = toItemsModelSection(this.currentSection);
+		this.allItems = section ? this.itemsModel.getItems(section).get() : [];
 		this.filterItems();
-		this._onDidChangeItemCount.fire(items.length);
+		this._onDidChangeItemCount.fire(this.allItems.length);
 	}
 
 	/**
 	 * Computes the item count for a given section without updating the display.
-	 * Uses the same loading and filtering logic as `loadItems` for consistency.
+	 * Reads from the items model so the count is consistent with what the
+	 * editor and sidebar render. Returns 0 for sections not modeled here
+	 * (McpServers / Plugins / Models — those have their own services).
 	 */
-	async computeItemCountForSection(section: AICustomizationManagementSection): Promise<number> {
-		const items = await this.fetchItemsForSection(section);
-		return items.length;
-	}
-
-	/**
-	 * Returns true if the given extension identifier matches the default
-	 * chat extension (e.g. GitHub Copilot Chat). Used to group items from
-	 * the chat extension under "Built-in" instead of "Extensions", similar
-	 * to how MCP categorizes built-in servers.
-	 */
-	private isChatExtensionItem(extensionId: ExtensionIdentifier): boolean {
-		const chatExtensionId = this.productService.defaultChatAgent?.chatExtensionId;
-		return !!chatExtensionId && ExtensionIdentifier.equals(extensionId, chatExtensionId);
-	}
-
-	/**
-	 * Post-processes items to assign groupKey overrides for extension-sourced
-	 * items. Applies the built-in grouping consistently across all item types.
-	 *
-	 * Items that already have an explicit groupKey (e.g. instruction categories,
-	 * agent hooks) are left untouched — groupKey overrides are only applied to
-	 * items whose current groupKey is `undefined`.
-	 */
-	private applyBuiltinGroupKeys(items: IAICustomizationListItem[], extensionInfoByUri: ReadonlyMap<string, { id: ExtensionIdentifier; displayName?: string }>): IAICustomizationListItem[] {
-		return items.map(item => {
-			if (item.storage !== PromptsStorage.extension) {
-				return item;
-			}
-			const extInfo = extensionInfoByUri.get(item.uri.toString());
-			if (!extInfo) {
-				return item;
-			}
-			const isBuiltin = this.isChatExtensionItem(extInfo.id);
-			if (isBuiltin) {
-				return {
-					...item,
-					isBuiltin: true,
-					groupKey: item.groupKey ?? BUILTIN_STORAGE,
-				};
-			}
-			return {
-				...item,
-				extensionLabel: extInfo.displayName || extInfo.id.value,
-			};
-		});
-	}
-
-	/**
-	 * Fetches and filters items for a given section.
-	 * Shared between `loadItems` (active section) and `computeItemCountForSection` (any section).
-	 */
-	private async fetchItemsForSection(section: AICustomizationManagementSection): Promise<IAICustomizationListItem[]> {
-		const promptType = sectionToPromptType(section);
-
-		// When the active harness has an external item provider, delegate to it
-		// instead of querying promptsService and applying filters.
-		const activeDescriptor = this.harnessService.getActiveDescriptor();
-		if (activeDescriptor.itemProvider && promptType) {
-			const items = await this.fetchItemsFromProvider(activeDescriptor.itemProvider, promptType);
-			// Enrich instruction items that lack groupKey/badge with parsed frontmatter
-			if (promptType === PromptsType.instructions) {
-				return this.enrichProviderInstructionItems(items);
-			}
-			return items;
-		}
-
-		const items: IAICustomizationListItem[] = [];
-		const disabledUris = this.promptsService.getDisabledPromptFiles(promptType);
-		const extensionInfoByUri = new Map<string, { id: ExtensionIdentifier; displayName?: string }>();
-
-
-		if (promptType === PromptsType.agent) {
-			// Use getCustomAgents which has parsed name/description from frontmatter
-			const agents = await this.promptsService.getCustomAgents(CancellationToken.None);
-			// Build extension display name lookup from raw file list
-			const allAgentFiles = await this.promptsService.listPromptFiles(PromptsType.agent, CancellationToken.None);
-			for (const file of allAgentFiles) {
-				if (file.extension) {
-					extensionInfoByUri.set(file.uri.toString(), { id: file.extension.identifier, displayName: file.extension.displayName });
-				}
-			}
-			for (const agent of agents) {
-				const filename = basename(agent.uri);
-				items.push({
-					id: agent.uri.toString(),
-					uri: agent.uri,
-					name: agent.name,
-					filename,
-					description: agent.description,
-					storage: agent.source.storage,
-					promptType,
-					pluginUri: agent.source.storage === PromptsStorage.plugin ? agent.source.pluginUri : undefined,
-					disabled: disabledUris.has(agent.uri),
-				});
-				// Track extension ID for built-in grouping (if not already set from file list)
-				if (agent.source.storage === PromptsStorage.extension && !extensionInfoByUri.has(agent.uri.toString())) {
-					extensionInfoByUri.set(agent.uri.toString(), { id: agent.source.extensionId });
-				}
-			}
-		} else if (promptType === PromptsType.skill) {
-			// Use findAgentSkills for enabled skills (has parsed name/description from frontmatter)
-			const skills = await this.promptsService.findAgentSkills(CancellationToken.None);
-			// Build extension ID lookup from raw file list (like MCP builds collectionSources)
-			const allSkillFiles = await this.promptsService.listPromptFiles(PromptsType.skill, CancellationToken.None);
-			for (const file of allSkillFiles) {
-				if (file.extension) {
-					extensionInfoByUri.set(file.uri.toString(), { id: file.extension.identifier, displayName: file.extension.displayName });
-				}
-			}
-			const uiIntegrations = this.workspaceService.getSkillUIIntegrations();
-			const seenUris = new ResourceSet();
-			for (const skill of skills || []) {
-				const filename = basename(skill.uri);
-				const skillName = skill.name || basename(dirname(skill.uri)) || filename;
-				seenUris.add(skill.uri);
-				const skillFolderName = basename(dirname(skill.uri));
-				const uiTooltip = uiIntegrations.get(skillFolderName);
-				items.push({
-					id: skill.uri.toString(),
-					uri: skill.uri,
-					name: skillName,
-					filename,
-					description: skill.description,
-					storage: skill.storage,
-					promptType,
-					pluginUri: skill.storage === PromptsStorage.plugin ? this.findPluginUri(skill.uri) : undefined,
-					disabled: false,
-					badge: uiTooltip ? localize('uiIntegrationBadge', "UI Integration") : undefined,
-					badgeTooltip: uiTooltip,
-				});
-			}
-			// Also include disabled skills from the raw file list
-			if (disabledUris.size > 0) {
-				for (const file of allSkillFiles) {
-					if (!seenUris.has(file.uri) && disabledUris.has(file.uri)) {
-						const filename = basename(file.uri);
-						const disabledName = file.name || basename(dirname(file.uri)) || filename;
-						const disabledFolderName = basename(dirname(file.uri));
-						const uiTooltip = uiIntegrations.get(disabledFolderName);
-						items.push({
-							id: file.uri.toString(),
-							uri: file.uri,
-							name: disabledName,
-							filename,
-							description: file.description,
-							storage: file.storage,
-							promptType,
-							disabled: true,
-							badge: uiTooltip ? localize('uiIntegrationBadge', "UI Integration") : undefined,
-							badgeTooltip: uiTooltip,
-						});
-					}
-				}
-			}
-		} else if (promptType === PromptsType.prompt) {
-			// Use getPromptSlashCommands which has parsed name/description from frontmatter
-			// Filter out skills since they have their own section
-			const commands = await this.promptsService.getPromptSlashCommands(CancellationToken.None);
-			for (const command of commands) {
-				if (command.promptPath.type === PromptsType.skill) {
-					continue;
-				}
-				const filename = basename(command.promptPath.uri);
-				items.push({
-					id: command.promptPath.uri.toString(),
-					uri: command.promptPath.uri,
-					name: command.name,
-					filename,
-					description: command.description,
-					storage: command.promptPath.storage,
-					promptType,
-					pluginUri: command.promptPath.storage === PromptsStorage.plugin ? command.promptPath.pluginUri : undefined,
-					disabled: disabledUris.has(command.promptPath.uri),
-				});
-				if (command.promptPath.extension) {
-					extensionInfoByUri.set(command.promptPath.uri.toString(), { id: command.promptPath.extension.identifier, displayName: command.promptPath.extension.displayName });
-				}
-			}
-		} else if (promptType === PromptsType.hook) {
-			// Try to parse individual hooks from each file; fall back to showing the file itself
-			const hookFiles = await this.promptsService.listPromptFiles(PromptsType.hook, CancellationToken.None);
-			const activeRoot = this.workspaceService.getActiveProjectRoot();
-			const userHomeUri = await this.pathService.userHome();
-			const userHome = userHomeUri.scheme === Schemas.file ? userHomeUri.fsPath : userHomeUri.path;
-
-			for (const hookFile of hookFiles) {
-				// Plugins parse their own hooks and emit them individually because they can
-				// be embedded with interpolations in the plugin manifests; don't re-parse them
-				if (hookFile.storage === PromptsStorage.plugin) {
-					const filename = basename(hookFile.uri);
-					items.push({
-						id: hookFile.uri.toString() + ':' + hookFile.name,
-						uri: hookFile.uri,
-						name: hookFile.name || this.getFriendlyName(filename),
-						filename,
-						storage: hookFile.storage,
-						promptType,
-						pluginUri: hookFile.pluginUri,
-						disabled: disabledUris.has(hookFile.uri),
-					});
-					continue;
-				}
-
-				let parsedHooks = false;
-				try {
-					const content = await this.fileService.readFile(hookFile.uri);
-					const json = parseJSONC(content.value.toString());
-					const { hooks } = parseHooksFromFile(hookFile.uri, json, activeRoot, userHome);
-
-					if (hooks.size > 0) {
-						parsedHooks = true;
-						for (const [hookType, entry] of hooks) {
-							const hookMeta = HOOK_METADATA[hookType];
-							for (let i = 0; i < entry.hooks.length; i++) {
-								const hook = entry.hooks[i];
-								const cmdLabel = formatHookCommandLabel(hook, OS);
-								const truncatedCmd = cmdLabel.length > 60 ? cmdLabel.substring(0, 57) + '...' : cmdLabel;
-								items.push({
-									id: `${hookFile.uri.toString()}#${entry.originalId}[${i}]`,
-									uri: hookFile.uri,
-									name: hookMeta?.label ?? entry.originalId,
-									filename: basename(hookFile.uri),
-									description: truncatedCmd || localize('hookUnset', "(unset)"),
-									storage: hookFile.storage,
-									promptType,
-									disabled: disabledUris.has(hookFile.uri),
-								});
-							}
-						}
-					}
-				} catch {
-					// Parse failed — fall through to show raw file
-				}
-
-				if (!parsedHooks) {
-					const filename = basename(hookFile.uri);
-					items.push({
-						id: hookFile.uri.toString(),
-						uri: hookFile.uri,
-						name: hookFile.name || this.getFriendlyName(filename),
-						filename,
-						storage: hookFile.storage,
-						promptType,
-						disabled: disabledUris.has(hookFile.uri),
-					});
-				}
-			}
-
-			// Also include hooks defined in agent frontmatter (not in sessions window)
-			// TODO: add this back when Copilot CLI supports this
-			const agents = !this.workspaceService.isSessionsWindow ? await this.promptsService.getCustomAgents(CancellationToken.None) : [];
-			for (const agent of agents) {
-				if (!agent.hooks) {
-					continue;
-				}
-				for (const hookType of Object.values(HookType)) {
-					const hookCommands = agent.hooks[hookType];
-					if (!hookCommands || hookCommands.length === 0) {
-						continue;
-					}
-					const hookMeta = HOOK_METADATA[hookType];
-					for (let i = 0; i < hookCommands.length; i++) {
-						const hook = hookCommands[i];
-						const cmdLabel = formatHookCommandLabel(hook, OS);
-						const truncatedCmd = cmdLabel.length > 60 ? cmdLabel.substring(0, 57) + '...' : cmdLabel;
-						items.push({
-							id: `${agent.uri.toString()}#hook:${hookType}[${i}]`,
-							uri: agent.uri,
-							name: hookMeta?.label ?? hookType,
-							filename: basename(agent.uri),
-							description: `${agent.name}: ${truncatedCmd || localize('hookUnset', "(unset)")}`,
-							storage: agent.source.storage,
-							groupKey: 'agents',
-							promptType,
-							pluginUri: agent.source.storage === PromptsStorage.plugin ? agent.source.pluginUri : undefined,
-							disabled: disabledUris.has(agent.uri),
-						});
-					}
-				}
-			}
-		} else {
-			// For instructions, group by category: agent instructions, context instructions, on-demand instructions
-			const promptFiles = await this.promptsService.listPromptFiles(promptType, CancellationToken.None);
-			for (const file of promptFiles) {
-				if (file.extension) {
-					extensionInfoByUri.set(file.uri.toString(), { id: file.extension.identifier, displayName: file.extension.displayName });
-				}
-			}
-			const agentInstructionFiles = await this.promptsService.listAgentInstructions(CancellationToken.None, undefined);
-			const agentInstructionUris = new ResourceSet(agentInstructionFiles.map(f => f.uri));
-
-			// Add agent instruction items
-			const workspaceFolderUris = this.workspaceContextService.getWorkspace().folders.map(f => f.uri);
-			const activeRoot = this.workspaceService.getActiveProjectRoot();
-			if (activeRoot) {
-				workspaceFolderUris.push(activeRoot);
-			}
-			for (const file of agentInstructionFiles) {
-				const storage = PromptsStorage.local;
-				const filename = basename(file.uri);
-				items.push({
-					id: file.uri.toString(),
-					uri: file.uri,
-					name: filename,
-					filename: this.labelService.getUriLabel(file.uri, { relative: true }),
-					displayName: filename,
-					storage,
-					promptType,
-					typeIcon: storageToIcon(storage),
-					groupKey: 'agent-instructions',
-					disabled: disabledUris.has(file.uri),
-				});
-			}
-
-			// Parse prompt files to separate into context vs on-demand
-			const promptFilesToParse = promptFiles.filter(item => !agentInstructionUris.has(item.uri));
-			const parseResults = await Promise.all(promptFilesToParse.map(async item => {
-				try {
-					const parsed = await this.promptsService.parseNew(item.uri, CancellationToken.None);
-					return { item, parsed };
-				} catch {
-					// Parse failed — treat as on-demand
-					return { item, parsed: undefined };
-				}
-			}));
-
-			for (const { item, parsed } of parseResults) {
-				items.push(this.buildInstructionListItem(
-					item.uri,
-					item.name || getCleanPromptName(item.uri),
-					item.description,
-					item.storage,
-					parsed?.header,
-					disabledUris.has(item.uri),
-					item.storage === PromptsStorage.plugin ? item.pluginUri : undefined,
-				));
-			}
-		}
-
-		// Assign built-in groupKeys — items from the default chat extension
-		// are re-grouped under "Built-in" instead of "Extensions".
-		// This is a single-pass transformation applied after all items are
-		// collected, keeping the item-building code free of grouping logic.
-		const groupedItems = this.applyBuiltinGroupKeys(items, extensionInfoByUri);
-
-		// Apply storage source filter (removes items not in visible sources or excluded user roots)
-		const filter = this.workspaceService.getStorageSourceFilter(promptType);
-		const withStorage = groupedItems.filter((item): item is IAICustomizationListItem & { readonly storage: PromptsStorage } => item.storage !== undefined);
-		const withoutStorage = groupedItems.filter(item => item.storage === undefined);
-		const filteredItems = [...applyStorageSourceFilter(withStorage, filter), ...withoutStorage];
-		items.length = 0;
-		items.push(...filteredItems);
-
-		// Apply workspace subpath filter — when the active harness specifies
-		// workspaceSubpaths, hide workspace-local items that aren't under one
-		// of the recognized sub-paths (e.g. Claude only shows .claude/ items).
-		// Exception: instruction files matched by the harness's instructionFileFilter
-		// are exempt (e.g. CLAUDE.md at workspace root is a Claude-native file
-		// even though it's not under .claude/).
-		const descriptor = this.harnessService.getActiveDescriptor();
-		const subpaths = descriptor.workspaceSubpaths;
-		const instrFilter = descriptor.instructionFileFilter;
-		if (subpaths) {
-			const projectRoot = this.workspaceService.getActiveProjectRoot();
-			for (let i = items.length - 1; i >= 0; i--) {
-				const item = items[i];
-				if (item.storage === PromptsStorage.local && projectRoot && isEqualOrParent(item.uri, projectRoot)) {
-					if (!matchesWorkspaceSubpath(item.uri.path, subpaths)) {
-						// Keep instruction files that match the harness's native patterns
-						if (instrFilter && promptType === PromptsType.instructions && matchesInstructionFileFilter(item.uri.path, instrFilter)) {
-							continue;
-						}
-						items.splice(i, 1);
-					}
-				}
-			}
-		}
-
-		// Apply instruction file filter — when the active harness specifies
-		// instructionFileFilter, hide instruction files that don't match the
-		// recognized patterns (e.g. Claude doesn't support *.instructions.md).
-		if (instrFilter && promptType === PromptsType.instructions) {
-			for (let i = items.length - 1; i >= 0; i--) {
-				if (!matchesInstructionFileFilter(items[i].uri.path, instrFilter)) {
-					items.splice(i, 1);
-				}
-			}
-		}
-
-		// Sort items by name
-		items.sort((a, b) => a.name.localeCompare(b.name));
-
-		return items;
-	}
-
-	/**
-	 * Fetches items from an external customization provider, converting
-	 * the provider's items into the list widget format.
-	 */
-	private async fetchItemsFromProvider(provider: IExternalCustomizationItemProvider, promptType: PromptsType): Promise<IAICustomizationListItem[]> {
-		const allItems = await provider.provideChatSessionCustomizations(CancellationToken.None);
-		if (!allItems) {
-			return [];
-		}
-
-		return allItems
-			.filter(item => item.type === promptType)
-			.map((item: IExternalCustomizationItem) => {
-				const pluginUri = this.findPluginUri(item.uri);
-				const storage = pluginUri ? PromptsStorage.plugin : this.inferStorageFromUri(item.uri);
-
-				return {
-					id: item.uri.toString(),
-					uri: item.uri,
-					name: item.name,
-					filename: basename(item.uri),
-					description: item.description,
-					promptType,
-					disabled: false,
-					groupKey: item.groupKey,
-					badge: item.badge,
-					badgeTooltip: item.badgeTooltip,
-					storage,
-					pluginUri,
-				};
-			})
-			.sort((a, b) => a.name.localeCompare(b.name));
-	}
-
-	/**
-	 * Post-processes instruction items from an external provider by parsing
-	 * each file's frontmatter to compute `groupKey`, `badge`, and `badgeTooltip`
-	 * when the provider didn't supply them. Items that already have a `groupKey`
-	 * (i.e. the extension set them explicitly) are left untouched.
-	 */
-	private async enrichProviderInstructionItems(items: IAICustomizationListItem[]): Promise<IAICustomizationListItem[]> {
-		const result: IAICustomizationListItem[] = [];
-		const toParse = items.filter(item => !item.groupKey);
-		const passThrough = items.filter(item => !!item.groupKey);
-
-		const parseResults = await Promise.all(toParse.map(async item => {
-			try {
-				const parsed = await this.promptsService.parseNew(item.uri, CancellationToken.None);
-				return { item, parsed };
-			} catch {
-				return { item, parsed: undefined };
-			}
-		}));
-
-		for (const { item, parsed } of parseResults) {
-			result.push(this.buildInstructionListItem(
-				item.uri,
-				item.name,
-				item.description,
-				item.storage ?? PromptsStorage.local,
-				parsed?.header,
-				item.disabled,
-				item.pluginUri,
-			));
-		}
-
-		result.push(...passThrough);
-		result.sort((a, b) => a.name.localeCompare(b.name));
-		return result;
-	}
-
-	/**
-	 * Builds an instruction list item with proper groupKey and badge based on
-	 * parsed frontmatter. Shared between the built-in and provider item paths.
-	 */
-	private buildInstructionListItem(
-		uri: URI,
-		rawName: string,
-		rawDescription: string | undefined,
-		storage: PromptsStorage,
-		header: PromptHeader | undefined,
-		disabled: boolean,
-		pluginUri?: URI,
-	): IAICustomizationListItem {
-		const name = header?.name;
-		const description = header?.description ?? rawDescription;
-		const friendlyName = this.getFriendlyName(name || rawName || getCleanPromptName(uri));
-		const filename = basename(uri);
-
-		// Agent instruction files (AGENTS.md, CLAUDE.md, copilot-instructions.md)
-		// are always-loaded and get their own group without applyTo badges.
-		if (isAgentInstructionFile(uri)) {
-			return {
-				id: uri.toString(),
-				uri,
-				name: friendlyName,
-				filename: this.labelService.getUriLabel(uri, { relative: true }),
-				displayName: friendlyName,
-				description,
-				storage,
-				promptType: PromptsType.instructions,
-				typeIcon: storageToIcon(storage),
-				groupKey: 'agent-instructions',
-				pluginUri,
-				disabled,
-			};
-		}
-
-		const applyTo = evaluateApplyToPattern(header, isInClaudeRulesFolder(uri));
-		if (applyTo !== undefined) {
-			const badge = applyTo === '**'
-				? localize('alwaysAdded', "always added")
-				: applyTo;
-			const badgeTooltip = applyTo === '**'
-				? localize('alwaysAddedTooltip', "This instruction is automatically included in every interaction.")
-				: localize('onContextTooltip', "This instruction is automatically included when files matching '{0}' are in context.", applyTo);
-			return {
-				id: uri.toString(),
-				uri,
-				name: friendlyName,
-				filename: this.labelService.getUriLabel(uri, { relative: true }),
-				displayName: friendlyName,
-				badge,
-				badgeTooltip,
-				description,
-				storage,
-				promptType: PromptsType.instructions,
-				typeIcon: storageToIcon(storage),
-				groupKey: 'context-instructions',
-				pluginUri,
-				disabled,
-			};
-		}
-
-		return {
-			id: uri.toString(),
-			uri,
-			name: friendlyName,
-			filename,
-			displayName: friendlyName,
-			description,
-			storage,
-			promptType: PromptsType.instructions,
-			typeIcon: storageToIcon(storage),
-			groupKey: 'on-demand-instructions',
-			pluginUri,
-			disabled,
-		};
-	}
-
-	/**
-	 * Infers the storage source of a URI by checking workspace folders,
-	 * user data paths, and plugin locations.
-	 */
-	private inferStorageFromUri(uri: URI): PromptsStorage {
-		// Check if under a workspace folder
-		if (this.workspaceContextService.getWorkspaceFolder(uri)) {
-			return PromptsStorage.local;
-		}
-
-		// Check if under the active project root (Sessions window may use
-		// an active root that is not a workspace folder, e.g. worktree/repo)
-		const activeProjectRoot = this.workspaceService.getActiveProjectRoot();
-		if (activeProjectRoot && isEqualOrParent(uri, activeProjectRoot)) {
-			return PromptsStorage.local;
-		}
-
-		// Check if under user data prompts home
-		const promptsHome = this.userDataProfileService.currentProfile.promptsHome;
-		if (isEqualOrParent(uri, promptsHome)) {
-			return PromptsStorage.user;
-		}
-
-		// Default to user for remaining files (e.g. user-scoped files
-		// outside the recognized prompts home)
-		return PromptsStorage.user;
-	}
-
-	/**
-	 * Derives a friendly name from a filename by removing extension suffixes.
-	 */
-	private getFriendlyName(filename: string): string {
-		// Remove common prompt file extensions like .instructions.md, .prompt.md, etc.
-		let name = filename
-			.replace(/\.instructions\.md$/i, '')
-			.replace(/\.prompt\.md$/i, '')
-			.replace(/\.agent\.md$/i, '')
-			.replace(/\.md$/i, '');
-
-		// Convert kebab-case or snake_case to Title Case
-		name = name
-			.replace(/[-_]/g, ' ')
-			.replace(/\b\w/g, c => c.toUpperCase());
-
-		return name || filename;
+	computeItemCountForSection(section: AICustomizationManagementSection): number {
+		const modelSection = toItemsModelSection(section);
+		return modelSection ? this.itemsModel.getCount(modelSection).get() : 0;
 	}
 
 	/**
 	 * Filters items based on the current search query and builds grouped display entries.
 	 */
-	private filterItems(): number {
-		let matchedItems: IAICustomizationListItem[];
-
+	/**
+	 * Applies the search query to items, returning matched items with highlight info.
+	 */
+	private applySearchFilter(items: readonly IAICustomizationListItem[]): IAICustomizationListItem[] {
 		if (!this.searchQuery.trim()) {
-			matchedItems = this.allItems.map(item => ({ ...item, nameMatches: undefined, descriptionMatches: undefined }));
-		} else {
-			const query = this.searchQuery.toLowerCase();
-			matchedItems = [];
+			return items.map(item => ({ ...item, nameMatches: undefined, descriptionMatches: undefined }));
+		}
 
-			for (const item of this.allItems) {
-				// Compute matches against the formatted display name so highlight positions
-				// are correct even after .md stripping and title-casing.
-				const displayName = item.displayName ?? formatDisplayName(item.name);
-				const nameMatches = matchesContiguousSubString(query, displayName);
-				const descriptionMatches = item.description ? matchesContiguousSubString(query, item.description) : null;
-				const filenameMatches = matchesContiguousSubString(query, item.filename);
-				const badgeMatches = item.badge ? matchesContiguousSubString(query, item.badge) : null;
+		const query = this.searchQuery.toLowerCase();
+		const matched: IAICustomizationListItem[] = [];
 
-				if (nameMatches || descriptionMatches || filenameMatches || badgeMatches) {
-					matchedItems.push({
-						...item,
-						nameMatches: nameMatches || undefined,
-						descriptionMatches: descriptionMatches || undefined,
-					});
-				}
+		for (const item of items) {
+			const displayName = item.displayName ?? formatDisplayName(item.name);
+			const nameMatches = matchesContiguousSubString(query, displayName);
+			const descriptionMatches = item.description ? matchesContiguousSubString(query, item.description) : null;
+			const filenameMatches = matchesContiguousSubString(query, item.filename);
+			const badgeMatches = item.badge ? matchesContiguousSubString(query, item.badge) : null;
+
+			if (nameMatches || descriptionMatches || filenameMatches || badgeMatches) {
+				matched.push({
+					...item,
+					nameMatches: nameMatches || undefined,
+					descriptionMatches: descriptionMatches || undefined,
+				});
 			}
 		}
 
-		// When items come from an external provider, group by groupKey if
-		// any items define one; otherwise fall through to standard
-		// storage-based grouping (storage is auto-inferred from URI).
-		const activeDescriptor = this.harnessService.getActiveDescriptor();
-		if (activeDescriptor.itemProvider) {
-			const hasExplicitGroups = matchedItems.some(item => item.groupKey !== undefined);
-			if (hasExplicitGroups) {
-				// Auto-build group definitions from the items' groupKey values,
-				// preserving insertion order. Items without a groupKey are
-				// placed into a fallback "Other" group. Uses a Map for O(1)
-				// lookups instead of repeated array scans.
-				const ungroupedKey = '__ungrouped__';
-				const groupsMap = new Map<string, { groupKey: string; label: string; icon: ThemeIcon; description: string; items: IAICustomizationListItem[] }>();
+		return matched;
+	}
 
-				for (const item of matchedItems) {
-					const key = item.groupKey ?? ungroupedKey;
-					let group = groupsMap.get(key);
-					if (!group) {
-						group = {
-							groupKey: key,
-							label: key === ungroupedKey ? localize('otherGroup', "Other") : key,
-							icon: this.getSectionIcon(),
-							description: '',
-							items: [],
-						};
-						groupsMap.set(key, group);
-					}
-					group.items.push(item);
-				}
-
-				const groups = Array.from(groupsMap.values());
-
-				// Sort items within each group
-				for (const group of groups) {
-					group.items.sort((a, b) => a.name.localeCompare(b.name));
-				}
-
-				// Build display entries with group headers
-				this.displayEntries = [];
-				let isFirstGroup = true;
-				for (const group of groups) {
-					if (group.items.length === 0) {
-						continue;
-					}
-
-					const collapsed = this.collapsedGroups.has(group.groupKey);
-
-					this.displayEntries.push({
-						type: 'group-header',
-						id: `group-${group.groupKey}`,
-						groupKey: group.groupKey,
-						label: group.label,
-						icon: group.icon,
-						count: group.items.length,
-						isFirst: isFirstGroup,
-						description: group.description,
-						collapsed,
-					});
-					isFirstGroup = false;
-
-					if (!collapsed) {
-						for (const item of group.items) {
-							this.displayEntries.push({ type: 'file-item', item });
-						}
-					}
-				}
-
-				this.list.splice(0, this.list.length, this.displayEntries);
-				this.updateEmptyState();
-				return matchedItems.length;
-			}
-			// No explicit groupKey — fall through to standard storage-based grouping below.
-		}
-
-		// Group items by storage
-		const promptType = sectionToPromptType(this.currentSection);
-		const visibleSources = new Set(this.workspaceService.getStorageSourceFilter(promptType).sources);
-		const groups: { groupKey: string; label: string; icon: ThemeIcon; description: string; items: IAICustomizationListItem[] }[] =
-			this.currentSection === AICustomizationManagementSection.Instructions
-				? [
-					{ groupKey: 'agent-instructions', label: localize('agentInstructionsGroup', "Agent Instructions"), icon: instructionsIcon, description: localize('agentInstructionsGroupDescription', "Instruction files automatically loaded for all agent interactions (e.g. AGENTS.md, CLAUDE.md, copilot-instructions.md)."), items: [] },
-					{ groupKey: 'context-instructions', label: localize('contextInstructionsGroup', "Included Based on Context"), icon: instructionsIcon, description: localize('contextInstructionsGroupDescription', "Instructions automatically loaded when matching files are part of the context."), items: [] },
-					{ groupKey: 'on-demand-instructions', label: localize('onDemandInstructionsGroup', "Loaded on Demand"), icon: instructionsIcon, description: localize('onDemandInstructionsGroupDescription', "Instructions loaded only when explicitly referenced."), items: [] },
-				]
-				: [
-					{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
-					{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
-					{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
-					{ groupKey: PromptsStorage.extension, label: localize('extensionGroup', "Extensions"), icon: extensionIcon, description: localize('extensionGroupDescription', "Read-only customizations provided by installed extensions."), items: [] },
-					{ groupKey: BUILTIN_STORAGE, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
-					{ groupKey: 'agents', label: localize('agentsGroup', "Agents"), icon: agentIcon, description: localize('agentsGroupDescription', "Hooks defined in agent files."), items: [] },
-				].filter(g => visibleSources.has(g.groupKey as PromptsStorage) || g.groupKey === 'agents');
-
-		for (const item of matchedItems) {
-			const key = item.groupKey ?? item.storage ?? PromptsStorage.local;
-			const group = groups.find(g => g.groupKey === key);
-			if (group) {
-				group.items.push(item);
-			}
-		}
-
+	/**
+	 * Builds grouped display entries from items assigned to groups.
+	 * Empty groups are omitted. Collapsed groups show only their header.
+	 */
+	private buildGroupedEntries(groups: ICustomizationItemGroup[]): void {
 		// Sort items within each group
 		for (const group of groups) {
 			group.items.sort((a, b) => a.name.localeCompare(b.name));
 		}
 
-		// Build display entries: group header + items (hidden if collapsed)
 		this.displayEntries = [];
 		let isFirstGroup = true;
 		for (const group of groups) {
@@ -1861,7 +1552,7 @@ export class AICustomizationListWidget extends Disposable {
 				continue;
 			}
 
-			const collapsed = this.collapsedGroups.has(group.groupKey);
+			const collapsed = !this.usesCardLayout() && this.collapsedGroups.has(this.getCollapsedGroupKey(group.groupKey));
 
 			this.displayEntries.push({
 				type: 'group-header',
@@ -1882,9 +1573,525 @@ export class AICustomizationListWidget extends Disposable {
 				}
 			}
 		}
+	}
 
+	/**
+	 * Commits the current displayEntries to the list and updates empty state.
+	 */
+	private commitDisplayEntries(): void {
 		this.list.splice(0, this.list.length, this.displayEntries);
 		this.updateEmptyState();
+	}
+
+	/**
+	 * Groups normalized list items for display.
+	 * Groups items by normalized storage/groupKey.
+	 */
+	private groupMatchedItems(matchedItems: IAICustomizationListItem[]): void {
+		const groups: ICustomizationItemGroup[] = [
+			{ groupKey: PromptsStorage.local, label: localize('workspaceGroup', "Workspace"), icon: workspaceIcon, description: localize('workspaceGroupDescription', "Customizations stored as files in your project folder and shared with your team via version control."), items: [] },
+			{ groupKey: PromptsStorage.user, label: localize('userGroup', "User"), icon: userIcon, description: localize('userGroupDescription', "Customizations stored locally on your machine in a central location. Private to you and available across all projects."), items: [] },
+			{ groupKey: PromptsStorage.plugin, label: localize('pluginGroup', "Plugins"), icon: pluginIcon, description: localize('pluginGroupDescription', "Read-only customizations provided by installed plugins."), items: [] },
+			{ groupKey: PromptsStorage.extension, label: localize('extensionGroup', "Extensions"), icon: extensionIcon, description: localize('extensionGroupDescription', "Read-only customizations provided by installed extensions."), items: [] },
+			{ groupKey: PromptsStorage.builtIn, label: localize('builtinGroup', "Built-in"), icon: builtinIcon, description: localize('builtinGroupDescription', "Built-in customizations shipped with the application."), items: [] },
+		];
+
+		for (const item of matchedItems) {
+			const key = this.currentSection === AICustomizationManagementSection.Instructions
+				? item.source
+				: item.groupKey ?? item.source ?? AICustomizationSources.local;
+			let group = groups.find(g => g.groupKey === key);
+			if (!group) {
+				// Dynamically create a group for unknown groupKeys from providers
+				let label: string;
+				let description = '';
+				switch (key) {
+					case 'remote-host':
+						label = localize('remoteHostGroupShort', "Remote");
+						if (this.currentSection === AICustomizationManagementSection.Skills) {
+							description = localize(
+								'remoteSkillsGroupDescription',
+								"Skills available from {0}, the active remote agent environment.",
+								this.harnessService.getActiveDescriptor().label,
+							);
+						}
+						break;
+					case 'remote-client':
+						label = localize('remoteClientGroupShort', "Local");
+						if (this.currentSection === AICustomizationManagementSection.Skills) {
+							description = localize(
+								'localSkillsGroupDescription',
+								"Skills stored on your local machine and synced to {0}, the active remote agent environment.",
+								this.harnessService.getActiveDescriptor().label,
+							);
+						}
+						break;
+					default:
+						label = formatDisplayName(key);
+				}
+				group = { groupKey: key, label, icon: Codicon.folder, description, items: [] };
+				// Insert dynamic groups before the built-in group so it always stays last.
+				const builtinIdx = groups.findIndex(g => g.groupKey === PromptsStorage.builtIn);
+				if (builtinIdx >= 0) {
+					groups.splice(builtinIdx, 0, group);
+				} else {
+					groups.push(group);
+				}
+			}
+			group.items.push(item);
+		}
+
+		this.buildGroupedEntries(groups);
+		if (this.usesCardLayout()) {
+			this.renderCardGroups(groups);
+		} else {
+			this.commitDisplayEntries();
+		}
+	}
+
+	private usesCardLayout(): boolean {
+		return usesCustomizationCardLayout(this.currentSection);
+	}
+
+	private renderCardGroups(groups: ICustomizationItemGroup[]): void {
+		const activeElement = DOM.getActiveElement();
+		const shouldRestoreFocus = this.cardMenuOpen || !!activeElement && this.cardContainer.contains(activeElement);
+		const focusItemId = this.lastCardFocusItemId;
+		const isFiltering = !!this.searchQuery.trim();
+		const usesTargetedCreateActions = this.usesTargetedCreateActions();
+		const createGroupKey = isFiltering || usesTargetedCreateActions ? undefined : this.getCreateActionGroupKey();
+		const alwaysVisibleGroupKeys = new Set(getAlwaysVisibleCustomizationGroupKeys(this.currentSection, isFiltering));
+		const visibleGroups = groups.filter(group => group.items.length > 0 || alwaysVisibleGroupKeys.has(group.groupKey) || group.groupKey === createGroupKey || this.sectionLoading && !isFiltering);
+		if (visibleGroups.length === 0) {
+			this.captureCardSectionScrollPositions();
+			this.cardDisposables.clear();
+			this.cardSectionLists = [];
+			this.cardRowsByUri.clear();
+			this.cardRowsById.clear();
+			this.cardMenuButtonsById.clear();
+			this.firstCardFocusElement = undefined;
+			this.cardSectionLayoutContainer = undefined;
+			DOM.clearNode(this.cardContainer);
+			this.cardScrollableNode.style.display = 'none';
+			this.updateEmptyState();
+			return;
+		}
+		if (createGroupKey) {
+			const createGroupIndex = visibleGroups.findIndex(group => group.groupKey === createGroupKey);
+			if (createGroupIndex > 0) {
+				visibleGroups.unshift(...visibleGroups.splice(createGroupIndex, 1));
+			}
+		}
+
+		this.captureCardSectionScrollPositions();
+		this.cardDisposables.clear();
+		this.cardSectionLists = [];
+		this.cardRowsByUri.clear();
+		this.cardRowsById.clear();
+		this.cardMenuButtonsById.clear();
+		this.firstCardFocusElement = undefined;
+		this.cardSectionLayoutContainer = undefined;
+		DOM.clearNode(this.cardContainer);
+		this.listContainer.style.display = 'none';
+		this.emptyStateContainer.style.display = 'none';
+		this.cardScrollableNode.style.display = '';
+		const content = DOM.append(this.cardContainer, $('.plugin-card-scroll.plugin-card-scroll-content.customization-card-scroll.distributed-section-layout'));
+		this.cardSectionLayoutContainer = content;
+		const contentResizeObserver = this.cardDisposables.add(new DOM.DisposableResizeObserver(
+			'AICustomizationListWidget.cardScrollContent',
+			() => this.scheduleCardSectionLayout(),
+		));
+		this.cardDisposables.add(contentResizeObserver.observe(content));
+
+		for (const group of visibleGroups) {
+			const collapsedGroupKey = this.getCollapsedGroupKey(group.groupKey);
+			const section = DOM.append(content, $('.plugin-card-section.customization-card-section'));
+			const header = DOM.append(section, $('.plugin-card-section-header'));
+			const text = DOM.append(header, $('.plugin-card-section-text'));
+			const headingRow = DOM.append(text, $('.plugin-card-section-heading-row'));
+			const heading = DOM.append(headingRow, $('h3.plugin-card-section-title'));
+			heading.textContent = group.label;
+			const count = DOM.append(headingRow, $('.plugin-card-section-count'));
+			count.textContent = String(group.items.length);
+			if (group.description) {
+				const description = DOM.append(text, $('.plugin-card-section-description'));
+				description.textContent = group.description;
+			}
+			if (!isFiltering && usesTargetedCreateActions && (group.groupKey === PromptsStorage.local || group.groupKey === PromptsStorage.user)) {
+				this.renderTargetedCardCreateActions(header, group.groupKey);
+			} else if (group.groupKey === createGroupKey) {
+				this.renderCardCreateActions(header);
+			}
+
+			const inventory = DOM.append(section, $('.plugin-card-grid.plugin-inventory-list.customization-inventory-list.virtualized-section-list'));
+			setupCollapsibleSection(
+				headingRow,
+				inventory,
+				group.label,
+				this.cardDisposables,
+				this.collapsedGroups.has(collapsedGroupKey),
+				collapsed => {
+					if (collapsed) {
+						this.collapsedGroups.add(collapsedGroupKey);
+					} else {
+						this.collapsedGroups.delete(collapsedGroupKey);
+					}
+					this.layoutCardSectionLists();
+					this.cardScrollable.scanDomNode();
+					this.scheduleCardSectionLayout();
+				},
+			);
+			if (group.items.length === 0) {
+				if (this.sectionLoading) {
+					renderVirtualizedSectionLoadingPlaceholder(inventory, localize('loadingCustomizations', "Loading customizations..."), ITEM_HEIGHT);
+				} else {
+					const empty = DOM.append(inventory, $('.plugin-inventory-empty'));
+					empty.textContent = this.getEmptyGroupMessage(group.groupKey);
+				}
+				continue;
+			}
+			this.createCustomizationSectionList(inventory, group.groupKey, group.label, group.items);
+		}
+		this.layoutCardSectionLists();
+		this.cardScrollable.scanDomNode();
+		this.scheduleCardSectionLayout();
+		if (shouldRestoreFocus) {
+			DOM.getWindow(this.element).requestAnimationFrame(() => {
+				if (!focusItemId || !this.focusCardSectionItem(focusItemId)) {
+					this.firstCardFocusElement?.focus();
+				}
+			});
+		}
+	}
+
+	private createCustomizationSectionList(container: HTMLElement, groupKey: string, label: string, items: readonly IAICustomizationListItem[]): void {
+		const key = `${this.currentSection}:${groupKey}`;
+		container.style.height = `${ITEM_HEIGHT}px`;
+		const itemRenderer = this.instantiationService.createInstance(
+			AICustomizationItemRenderer,
+			(item: IAICustomizationListItem, anchor: HTMLElement) => this.showCardItemActions(item, anchor),
+		);
+		const list = this.cardDisposables.add(this.instantiationService.createInstance(
+			WorkbenchList<IFileItemEntry>,
+			`AICustomizationManagementList.${label}`,
+			container,
+			new AICustomizationListDelegate(),
+			[itemRenderer],
+			{
+				identityProvider: { getId: entry => entry.item.id },
+				accessibilityProvider: {
+					getAriaLabel: entry => getCustomizationItemAriaLabel(entry.item),
+					getWidgetAriaLabel: () => label,
+					getSetSize: (_entry, _index, listLength) => listLength,
+					getPosInSet: (_entry, index) => index + 1,
+				},
+				keyboardNavigationLabelProvider: {
+					getKeyboardNavigationLabel: entry => entry.item.name,
+				},
+				multipleSelectionSupport: false,
+				openOnSingleClick: true,
+			},
+		));
+		list.splice(0, 0, items.map(item => ({ type: 'file-item', item })));
+		list.scrollTop = this.cardSectionScrollPositions.get(key) ?? 0;
+		this.cardDisposables.add(list.onDidOpen(event => {
+			if (event.element) {
+				this._onDidSelectItem.fire(event.element.item);
+			}
+		}));
+		this.cardDisposables.add(list.onDidChangeFocus(event => {
+			itemRenderer.setFocusedIndex(event.indexes.length ? event.indexes[0] : -1);
+			if (event.elements.length > 0) {
+				this.lastCardFocusItemId = event.elements[0].item.id;
+			}
+		}));
+		this.cardDisposables.add(list.onDidFocus(() => {
+			if (list.getFocus().length === 0 && items.length > 0) {
+				list.setFocus([0]);
+			}
+		}));
+		this.cardDisposables.add(list.onContextMenu(event => this.onContextMenu(event as IListContextMenuEvent<IListEntry>)));
+		this.cardSectionLists.push({ list, items, container, key });
+	}
+
+	private captureCardSectionScrollPositions(): void {
+		for (const section of this.cardSectionLists) {
+			this.cardSectionScrollPositions.set(section.key, section.list.scrollTop);
+		}
+	}
+
+	private layoutCardSectionLists(): void {
+		const content = this.cardSectionLayoutContainer;
+		if (!content) {
+			return;
+		}
+		const heights = layoutVirtualizedSections(content, this.cardSectionLists.map(section => ({
+			container: section.container,
+			contentHeight: section.items.length * ITEM_HEIGHT,
+			minimumHeight: getVirtualizedSectionMinimumHeight(section.items, () => ITEM_HEIGHT),
+		})));
+		for (let index = 0; index < this.cardSectionLists.length; index++) {
+			const section = this.cardSectionLists[index];
+			const height = heights[index];
+			layoutVirtualizedSectionList(section.list, section.container, height, section.container.clientWidth || undefined);
+		}
+	}
+
+	private scheduleCardSectionLayout(): void {
+		const targetWindow = DOM.getWindow(this.element);
+		this.pendingCardSectionLayout.value = DOM.scheduleAtNextAnimationFrame(targetWindow, () => {
+			this.layoutCardSectionLists();
+			this.cardScrollable.scanDomNode();
+		});
+	}
+
+	private focusCardSectionItem(itemId: string): boolean {
+		for (const section of this.cardSectionLists) {
+			const index = section.items.findIndex(item => item.id === itemId);
+			if (index >= 0) {
+				section.list.reveal(index);
+				section.list.setFocus([index]);
+				section.list.domFocus();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private usesTargetedCreateActions(): boolean {
+		return this.currentSection === AICustomizationManagementSection.Agents
+			|| this.currentSection === AICustomizationManagementSection.Skills
+			|| this.currentSection === AICustomizationManagementSection.Instructions
+			|| this.currentSection === AICustomizationManagementSection.Hooks
+			|| this.currentSection === AICustomizationManagementSection.Prompts;
+	}
+
+	private getCreateActionGroupKey(): string | undefined {
+		if (this.buildCreateActions().length === 0) {
+			return undefined;
+		}
+		return this.hasActiveWorkspace() ? PromptsStorage.local : PromptsStorage.user;
+	}
+
+	private renderTargetedCardCreateActions(header: HTMLElement, groupKey: string): void {
+		const target = groupKey === PromptsStorage.local ? 'workspace' : 'user';
+		const hasWorkspace = this.hasActiveWorkspace();
+		const actions = this.buildCreateActions().filter(action =>
+			action.target === target
+			|| action.target === undefined && (target === 'workspace' ? hasWorkspace : !hasWorkspace)
+		);
+		const primary = actions.find(action => action.target === target) ?? actions[0];
+		if (!primary) {
+			return;
+		}
+
+		const container = DOM.append(header, $('.plugin-card-section-actions'));
+		const label = this.formatTargetedCreateActionLabel(primary);
+		const button = this.cardDisposables.add(new Button(container, {
+			...defaultButtonStyles,
+			secondary: true,
+			title: primary.tooltip ?? label,
+			ariaLabel: primary.tooltip ?? label,
+		}));
+		button.element.classList.add('customization-create-action');
+		button.label = label;
+		button.enabled = primary.enabled;
+		this.firstCardFocusElement ??= button.element;
+		this.cardDisposables.add(button.onDidClick(() => primary.run()));
+
+		const generateAction = actions.find(action => action.kind === 'generate');
+		if (generateAction && generateAction !== primary) {
+			const generateButton = this.cardDisposables.add(new Button(container, {
+				...defaultButtonStyles,
+				secondary: true,
+				title: generateAction.tooltip ?? generateAction.label,
+				ariaLabel: generateAction.tooltip ?? generateAction.label,
+			}));
+			generateButton.element.classList.add('customization-generate-action');
+			generateButton.label = generateAction.label;
+			generateButton.enabled = generateAction.enabled;
+			this.cardDisposables.add(generateButton.onDidClick(() => generateAction.run()));
+		}
+
+		const secondaryActions = actions.filter(action => action !== primary && action !== generateAction);
+		if (secondaryActions.length > 0) {
+			const moreLabel = localize('moreCreateActions', "More creation actions for {0}", groupKey === PromptsStorage.local ? localize('workspace', "Workspace") : localize('user', "User"));
+			const more = this.cardDisposables.add(new Button(container, {
+				...getButtonStyles({ buttonSecondaryBackground: undefined, buttonSecondaryBorder: undefined }),
+				secondary: true,
+				supportIcons: true,
+				title: moreLabel,
+				ariaLabel: moreLabel,
+			}));
+			more.element.classList.add('plugin-card-icon-button', 'customization-create-more-action');
+			more.label = `$(${Codicon.ellipsis.id})`;
+			this.cardDisposables.add(more.onDidClick(() => this.showCreateActionsMenu(secondaryActions, more.element)));
+		}
+	}
+
+	private formatTargetedCreateActionLabel(action: ICreateAction): string {
+		return getTargetedCreateActionLabel(action.label, action.compactLabel);
+	}
+
+	private showCreateActionsMenu(createActions: readonly ICreateAction[], anchor: HTMLElement): void {
+		const disposables = new DisposableStore();
+		const actions = createActions.map((action, index) => disposables.add(new Action(
+			`customization.create.${index}`,
+			action.label.replace(/^\$\([^)]+\)\s*/, ''),
+			undefined,
+			action.enabled,
+			() => action.run(),
+		)));
+		this.contextMenuService.showContextMenu({
+			getAnchor: () => anchor,
+			getActions: () => actions,
+			onHide: () => disposables.dispose(),
+		});
+	}
+
+	private getEmptyGroupMessage(groupKey: string): string {
+		const workspace = groupKey === PromptsStorage.local;
+		switch (this.currentSection) {
+			case AICustomizationManagementSection.Agents:
+				return workspace ? localize('noWorkspaceAgents', "No workspace agents yet.") : localize('noUserAgents', "No user agents yet.");
+			case AICustomizationManagementSection.Skills:
+				return workspace ? localize('noWorkspaceSkills', "No workspace skills yet.") : localize('noUserSkills', "No user skills yet.");
+			case AICustomizationManagementSection.Instructions:
+				return workspace ? localize('noWorkspaceInstructions', "No workspace instructions yet.") : localize('noUserInstructions', "No user instructions yet.");
+			case AICustomizationManagementSection.Hooks:
+				return workspace ? localize('noWorkspaceHooks', "No workspace hooks yet.") : localize('noUserHooks', "No user hooks yet.");
+			case AICustomizationManagementSection.Prompts:
+				return workspace ? localize('noWorkspacePrompts', "No workspace prompts yet.") : localize('noUserPrompts', "No user prompts yet.");
+			default:
+				return localize('noCustomizationsInSection', "No customizations are available.");
+		}
+	}
+
+	private renderCardCreateActions(header: HTMLElement): void {
+		const actions = this.buildCreateActions();
+		const [primary, ...dropdown] = actions;
+		if (!primary) {
+			return;
+		}
+		const container = DOM.append(header, $('.plugin-card-section-actions'));
+		const accessibleLabel = primary.tooltip ?? primary.label.replace(/\$\([^)]+\)\s*/g, '');
+		if (dropdown.length > 0) {
+			const button = this.cardDisposables.add(new ButtonWithDropdown(container, {
+				...defaultButtonStyles,
+				secondary: true,
+				contextMenuProvider: this.contextMenuService,
+				addPrimaryActionToDropdown: false,
+				actions: { getActions: () => this.getDropdownActions() },
+				title: accessibleLabel,
+				ariaLabel: accessibleLabel,
+			}));
+			button.element.classList.add('customization-create-action');
+			button.label = primary.label;
+			button.enabled = primary.enabled;
+			this.firstCardFocusElement ??= button.element;
+			this.cardDisposables.add(button.onDidClick(() => this.executePrimaryCreateAction()));
+			return;
+		}
+
+		const button = this.cardDisposables.add(new Button(container, {
+			...defaultButtonStyles,
+			secondary: true,
+			title: accessibleLabel,
+			ariaLabel: accessibleLabel,
+		}));
+		button.element.classList.add('customization-create-action');
+		button.label = primary.label;
+		button.enabled = primary.enabled;
+		this.firstCardFocusElement ??= button.element;
+		this.cardDisposables.add(button.onDidClick(() => this.executePrimaryCreateAction()));
+	}
+
+	protected appendCustomizationCardRow(parent: HTMLElement, item: IAICustomizationListItem, groupLabel: string, cardList: CustomizationCardListController): void {
+		const row = DOM.append(parent, $('.plugin-list-item.plugin-home-row.customization-home-row'));
+		row.classList.toggle('disabled', item.disabled);
+		const displayName = item.displayName ?? formatDisplayName(item.name);
+		const secondaryText = getCustomizationSecondaryText(item.description, item.filename, item.promptType);
+		const statusLabel = getCustomizationItemStatusLabel(item);
+		const accessibleSecondaryText = [secondaryText, statusLabel].filter(Boolean).join('. ');
+		const accessibleLabel = item.disabled
+			? localize('customizationCardAriaLabelDisabled', "{0}. {1}. Disabled", displayName, accessibleSecondaryText || groupLabel)
+			: localize('customizationCardAriaLabel', "{0}. {1}", displayName, accessibleSecondaryText || groupLabel);
+		const primary = createCustomizationCardPrimaryAction(row, accessibleLabel, 'customization-row-primary');
+		const hasReadableContent = hasReadableCustomizationContent(item.uri);
+		if (!hasReadableContent) {
+			primary.setAttribute('aria-disabled', 'true');
+		}
+		this.firstCardFocusElement ??= primary;
+		if (!this.cardRowsByUri.has(item.uri.toString())) {
+			this.cardRowsByUri.set(item.uri.toString(), primary);
+		}
+		this.cardRowsById.set(item.id, primary);
+		this.cardDisposables.add(DOM.addDisposableListener(primary, 'focus', () => {
+			this.lastCardFocusItemId = item.id;
+		}));
+		if (hasReadableContent) {
+			this.cardDisposables.add(DOM.addDisposableListener(primary, 'click', () => this._onDidSelectItem.fire(item)));
+		}
+		const hasItemActions = this.hasCardItemActions(item);
+		if (hasItemActions) {
+			this.cardDisposables.add(DOM.addDisposableListener(row, 'contextmenu', event => {
+				event.preventDefault();
+				this.showCardItemActions(item, row);
+			}));
+		}
+		this.cardDisposables.add(this.hoverService.setupDelayedHover(row, () => ({
+			content: `${displayName}\n${this.labelService.getUriLabel(item.uri, { relative: item.source === AICustomizationSources.local })}`,
+			appearance: { compact: true, skipFadeInAnimation: true },
+		})));
+
+		const details = DOM.append(primary, $('.plugin-list-item-details'));
+		const nameRow = DOM.append(details, $('.plugin-list-item-name-row'));
+		const name = DOM.append(nameRow, $('.plugin-list-item-name'));
+		name.textContent = displayName;
+		if (item.badge && item.promptType !== PromptsType.instructions) {
+			const badge = DOM.append(nameRow, $('.inline-badge.item-badge'));
+			badge.textContent = item.badge;
+			badge.title = item.badgeTooltip ?? item.badge;
+		}
+		const description = DOM.append(details, $('.plugin-list-item-description'));
+		description.textContent = secondaryText ?? localize('customizationNoDescription', "No description provided.");
+
+		const actionElements: HTMLElement[] = [];
+		if (hasItemActions) {
+			const actionContainer = DOM.append(row, $('.plugin-list-item-action'));
+			this.cardDisposables.add(DOM.addDisposableGenericMouseDownListener(actionContainer, e => e.stopPropagation()));
+			this.cardDisposables.add(DOM.addDisposableListener(actionContainer, 'click', e => e.stopPropagation()));
+			const more = this.cardDisposables.add(new Button(actionContainer, {
+				...getButtonStyles({ buttonSecondaryBackground: undefined, buttonSecondaryBorder: undefined }),
+				secondary: true,
+				supportIcons: true,
+				ariaLabel: localize('customizationMoreActionsAria', "More actions for {0}", displayName),
+			}));
+			more.element.classList.add('plugin-card-icon-button');
+			more.label = `$(${Codicon.ellipsis.id})`;
+			this.cardMenuButtonsById.set(item.id, more.element);
+			this.cardDisposables.add(DOM.addDisposableListener(more.element, 'focus', () => {
+				this.lastCardFocusItemId = item.id;
+			}));
+			this.cardDisposables.add(more.onDidClick(() => this.showCardItemActions(item, more.element)));
+			actionElements.push(more.element);
+		}
+		cardList.addItem({
+			row,
+			primaryAction: primary,
+			label: displayName,
+			actions: actionElements,
+			contextMenuAction: actionElements[0],
+		});
+	}
+
+	/**
+	 * Filters items based on the current search query and builds grouped display entries.
+	 */
+	private filterItems(): number {
+		const matchedItems = this.applySearchFilter(this.allItems);
+		this.groupMatchedItems(matchedItems);
+
 		return matchedItems.length;
 	}
 
@@ -1892,24 +2099,25 @@ export class AICustomizationListWidget extends Disposable {
 	 * Toggles the collapsed state of a group.
 	 */
 	private toggleGroup(entry: IGroupHeaderEntry): void {
-		if (this.collapsedGroups.has(entry.groupKey)) {
-			this.collapsedGroups.delete(entry.groupKey);
+		const collapsedGroupKey = this.getCollapsedGroupKey(entry.groupKey);
+		if (this.collapsedGroups.has(collapsedGroupKey)) {
+			this.collapsedGroups.delete(collapsedGroupKey);
 		} else {
-			this.collapsedGroups.add(entry.groupKey);
+			this.collapsedGroups.add(collapsedGroupKey);
 		}
 		this.filterItems();
+	}
+
+	private getCollapsedGroupKey(groupKey: string): string {
+		return getCollapsedCustomizationGroupKey(this.currentSection, groupKey);
 	}
 
 	private updateEmptyState(): void {
 		const hasItems = this.displayEntries.length > 0;
 		if (!hasItems) {
+			this.cardScrollableNode.style.display = 'none';
 			this.emptyStateContainer.style.display = 'flex';
 			this.listContainer.style.display = 'none';
-
-			// Update icon based on section
-			this.emptyStateIcon.className = 'empty-state-icon';
-			const sectionIcon = this.getSectionIcon();
-			this.emptyStateIcon.classList.add(...ThemeIcon.asClassNameArray(sectionIcon));
 
 			if (this.searchQuery.trim()) {
 				// Search with no results
@@ -1923,36 +2131,9 @@ export class AICustomizationListWidget extends Disposable {
 			}
 		} else {
 			this.emptyStateContainer.style.display = 'none';
-			this.listContainer.style.display = '';
+			this.listContainer.style.display = this.usesCardLayout() ? 'none' : '';
+			this.cardScrollableNode.style.display = this.usesCardLayout() ? '' : 'none';
 		}
-	}
-
-	private getSectionIcon(): ThemeIcon {
-		switch (this.currentSection) {
-			case AICustomizationManagementSection.Agents:
-				return agentIcon;
-			case AICustomizationManagementSection.Skills:
-				return skillIcon;
-			case AICustomizationManagementSection.Instructions:
-				return instructionsIcon;
-			case AICustomizationManagementSection.Hooks:
-				return hookIcon;
-			case AICustomizationManagementSection.Prompts:
-			default:
-				return promptIcon;
-		}
-	}
-
-	/**
-	 * Finds the plugin URI for an item URI by checking the known plugins.
-	 */
-	private findPluginUri(itemUri: URI): URI | undefined {
-		for (const plugin of this.agentPluginService.plugins.get()) {
-			if (isEqualOrParent(itemUri, plugin.uri)) {
-				return plugin.uri;
-			}
-		}
-		return undefined;
 	}
 
 	private getEmptyStateInfo(): { title: string; description: string } {
@@ -2011,6 +2192,18 @@ export class AICustomizationListWidget extends Disposable {
 	 * Focuses the list.
 	 */
 	focusList(): void {
+		if (this.usesCardLayout()) {
+			if (!this.firstCardFocusElement) {
+				const firstSection = this.cardSectionLists[0];
+				if (firstSection?.items.length) {
+					firstSection.list.setFocus([0]);
+					firstSection.list.domFocus();
+				}
+			} else {
+				this.firstCardFocusElement.focus();
+			}
+			return;
+		}
 		this.list.domFocus();
 		if (this.displayEntries.length > 0) {
 			this.list.setFocus([0]);
@@ -2021,32 +2214,101 @@ export class AICustomizationListWidget extends Disposable {
 	 * Scrolls the list so the last item is visible.
 	 */
 	revealLastItem(): void {
+		if (this.usesCardLayout()) {
+			const reveal = () => {
+				const section = this.cardSectionLists.at(-1);
+				if (section?.items.length) {
+					section.list.reveal(section.items.length - 1);
+				}
+				this.cardScrollable.scanDomNode();
+				this.cardScrollable.setScrollPosition({ scrollTop: this.cardContainer.scrollHeight });
+			};
+			reveal();
+			this.revealLastItemScheduler.value = DOM.scheduleAtNextAnimationFrame(DOM.getWindow(this.element), reveal);
+			return;
+		}
 		if (this.displayEntries.length > 0) {
 			this.list.reveal(this.displayEntries.length - 1);
 		}
 	}
 
 	/**
+	 * Reveals and selects the first list item whose URI matches one of the provided URIs.
+	 */
+	revealAndSelectFirstItemByUri(uris: readonly URI[]): boolean {
+		if (this.usesCardLayout()) {
+			for (const section of this.cardSectionLists) {
+				const index = section.items.findIndex(item => uris.some(uri => isEqual(item.uri, uri)));
+				if (index >= 0) {
+					section.list.reveal(index);
+					section.list.setFocus([index]);
+					section.list.setSelection([index]);
+					section.list.domFocus();
+					return true;
+				}
+			}
+			return false;
+		}
+		const entryIndex = this.displayEntries.findIndex(entry => {
+			return entry.type === 'file-item' && uris.some(uri => isEqual(entry.item.uri, uri));
+		});
+		if (entryIndex < 0) {
+			return false;
+		}
+
+		this.list.reveal(entryIndex);
+		this.list.setFocus([entryIndex]);
+		this.list.setSelection([entryIndex]);
+		this.list.domFocus();
+		return true;
+	}
+
+	/**
 	 * Layouts the widget.
 	 */
 	layout(height: number, width: number): void {
-		this.element.style.height = `${height}px`;
+		this.lastLayoutHeight = height;
+		this.lastLayoutWidth = width;
+		if (this.element.parentElement?.style.display === 'none') {
+			return;
+		}
+		this.element.classList.toggle('narrow-layout', width < 500);
+		this.element.classList.toggle('wide-layout', width >= 600);
+		// Use the CSS-computed height within the padded parent.
+		this.element.style.height = '';
 		this.searchInput.layout();
 
 		// Measure sibling elements to calculate the remaining space for the list.
-		// When offsetHeight returns 0 the container just became visible
-		// after display:none and the browser hasn't reflowed yet — defer
-		// layout to the next frame so measurements are accurate.
+		// When offsetHeight returns 0 the container may have just become visible
+		// after display:none and the browser hasn't reflowed yet — defer layout
+		// once so measurements are accurate. Only retry once to avoid an endless
+		// loop when the widget is created while permanently hidden.
 		const searchBarHeight = this.searchAndButtonContainer.offsetHeight;
-		if (searchBarHeight === 0) {
-			DOM.getWindow(this.element).requestAnimationFrame(() => this.layout(height, width));
+		if (searchBarHeight === 0 && !this._layoutDeferred) {
+			this._layoutDeferred = true;
+			DOM.getWindow(this.element).requestAnimationFrame(() => {
+				try {
+					this.layout(height, width);
+				} finally {
+					this._layoutDeferred = false;
+				}
+			});
 			return;
 		}
-		const footerHeight = this.sectionHeader.offsetHeight;
-		const listHeight = Math.max(0, height - searchBarHeight - footerHeight);
+		const headerHeight = this.sectionTitleHeader.offsetHeight;
+		this.lastHeaderHeight = headerHeight;
+		const availableHeight = this.element.clientHeight || height;
+		const listHeight = Math.max(0, availableHeight - searchBarHeight - headerHeight);
 
+		this.cardScrollableNode.style.height = `${listHeight}px`;
 		this.listContainer.style.height = `${listHeight}px`;
-		this.list.layout(listHeight, width);
+		if (this.usesCardLayout()) {
+			this.layoutCardSectionLists();
+			this.cardScrollable.scanDomNode();
+			this.scheduleCardSectionLayout();
+		} else {
+			this.list.layout(listHeight, width);
+		}
 	}
 
 	/**
@@ -2060,13 +2322,17 @@ export class AICustomizationListWidget extends Disposable {
 	 * Generates a debug report for the current section.
 	 */
 	async generateDebugReport(): Promise<string> {
-		const activeDescriptor = this.harnessService.getActiveDescriptor();
+		if (this._store.isDisposed) {
+			return '';
+		}
 		return generateCustomizationDebugReport(
 			this.currentSection,
 			this.promptsService,
 			this.workspaceService,
 			{ allItems: this.allItems, displayEntries: this.displayEntries },
-			activeDescriptor.itemProvider,
+			this.itemsModel.getActiveItemSource(),
+			this.harnessService,
+			this.agentPluginService,
 		);
 	}
 }
